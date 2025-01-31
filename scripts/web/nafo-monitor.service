@@ -1,0 +1,13 @@
+[Unit]
+Description=NAFO Gutenberg Download Monitor
+After=network.target
+
+[Service]
+User=nafo_admin
+WorkingDirectory=/opt/nafo_radio/web
+ExecStart=/usr/local/bin/python3 download_monitor.py
+Restart=always
+Environment=STORAGE_ROOT=/storage
+
+[Install]
+WantedBy=multi-user.target 

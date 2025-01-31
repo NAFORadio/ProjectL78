@@ -22,7 +22,6 @@ CATALOG_URLS=(
 
 # Download settings
 MAX_PARALLEL=5
-RATE_LIMIT="500k"
 
 setup_environment() {
     mkdir -p "$CATALOG_DIR" "$BOOKS_DIR" "$METADATA_DIR"
@@ -64,8 +63,14 @@ fetch_catalog() {
             > "${METADATA_DIR}/${book_id}.json"
     done < <(find . -name "pg*.rdf")
     
-    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
+    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt" || echo 0)
+    if [ "$total_books" -eq 0 ]; then
+        log_message "${RED}No books found in catalog. Check network connection and try again.${NC}"
+        return 1
+    fi
+    
     log_message "${GREEN}Found $total_books books with compressed text files${NC}"
+    return 0
 }
 
 download_book() {
@@ -85,7 +90,7 @@ download_book() {
     fi
     
     # Download compressed file directly
-    if wget --limit-rate="$RATE_LIMIT" --timeout=30 --tries=3 -q "$url" -O "${output_dir}/${book_id}.txt.gz"; then
+    if wget --timeout=30 --tries=3 -q "$url" -O "${output_dir}/${book_id}.txt.gz"; then
         if verify_compressed_file "${output_dir}/${book_id}.txt.gz"; then
             echo "${book_id}:SUCCESS:$(date +%s)" >> "$PROGRESS_FILE"
             return 0
@@ -120,7 +125,13 @@ verify_compressed_file() {
 }
 
 download_all() {
-    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
+    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt" || echo 0)
+    
+    if [ "$total_books" -eq 0 ]; then
+        log_message "${RED}No books found to download${NC}"
+        return 1
+    fi
+    
     log_message "Starting download of $total_books compressed books..."
     
     local completed=0
@@ -160,20 +171,25 @@ main() {
     
     # Handle resume
     if [ -f "$PROGRESS_FILE" ]; then
-        local total_downloaded=$(grep -c SUCCESS "$PROGRESS_FILE")
-        local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
-        local percent_done=$(( (total_downloaded * 100) / total_books ))
+        local total_downloaded=$(grep -c SUCCESS "$PROGRESS_FILE" || echo 0)
+        local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt" || echo 0)
         
-        log_message "Previous download session found:"
-        log_message "Progress: $total_downloaded/$total_books ($percent_done%)"
-        read -p "Resume download? (y/n) " answer
-        
-        if [[ $answer =~ ^[Yy]$ ]]; then
-            comm -23 \
-                <(sort "${CATALOG_DIR}/book_ids.txt") \
-                <(grep SUCCESS "$PROGRESS_FILE" | cut -d: -f1 | sort) \
-                > "${CATALOG_DIR}/remaining_books.txt"
-            mv "${CATALOG_DIR}/remaining_books.txt" "${CATALOG_DIR}/book_ids.txt"
+        if [ "$total_books" -gt 0 ]; then
+            local percent_done=$(( (total_downloaded * 100) / total_books ))
+            log_message "Previous download session found:"
+            log_message "Progress: $total_downloaded/$total_books ($percent_done%)"
+            read -p "Resume download? (y/n) " answer
+            
+            if [[ $answer =~ ^[Yy]$ ]]; then
+                comm -23 \
+                    <(sort "${CATALOG_DIR}/book_ids.txt") \
+                    <(grep SUCCESS "$PROGRESS_FILE" | cut -d: -f1 | sort) \
+                    > "${CATALOG_DIR}/remaining_books.txt"
+                mv "${CATALOG_DIR}/remaining_books.txt" "${CATALOG_DIR}/book_ids.txt"
+            fi
+        else
+            log_message "${RED}No books found in catalog. Running full download...${NC}"
+            fetch_catalog || exit 1
         fi
     fi
     

@@ -1,292 +1,191 @@
 #!/bin/bash
-# Gutenberg Library Downloader using Kiwix and OpenZIM
-# Based on: https://github.com/openzim/gutenberg
+# Gutenberg Library Downloader for Offline Use
+# Based on: https://www.gutenberg.org/ebooks/offline_catalogs.html
 
 source "$(dirname "$0")/../common/utils.sh"
 
 # Configuration
 STORAGE_ROOT="${STORAGE_ROOT:-/storage}"
-KIWIX_DIR="${STORAGE_ROOT}/kiwix"
-LIBRARY_DIR="${KIWIX_DIR}/library"
-KIWIX_VERSION="3.6.0"
+LIBRARY_DIR="${STORAGE_ROOT}/library"
+CATALOG_DIR="${LIBRARY_DIR}/catalog"
+BOOKS_DIR="${LIBRARY_DIR}/books"
+METADATA_DIR="${LIBRARY_DIR}/metadata"
+FAILED_LOG="${LIBRARY_DIR}/failed_downloads.log"
+PROGRESS_FILE="${LIBRARY_DIR}/download_progress.log"
 
-# Mirror configuration
-declare -a MIRRORS=(
-    "https://download.kiwix.org/zim/gutenberg/"
-    "https://mirror.download.kiwix.org/zim/gutenberg/"
-    "https://download.openzim.org/gutenberg/"
+# Catalog URLs for compressed files
+CATALOG_URLS=(
+    "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
+    "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv"
+    "https://www.gutenberg.org/dirs/GUTINDEX.ALL"
 )
 
-# Dependencies based on OpenZIM requirements
-REQUIRED_PACKAGES=(
-    "wget"
-    "curl"
-    "python3"
-    "python3-pip"
-    "libxml2-dev"
-    "libxslt-dev"
-    "advancecomp"
-    "jpegoptim"
-    "pngquant"
-    "p7zip-full"
-    "gifsicle"
-    "zip"
-    "zim-tools"
-)
+# Download settings
+MAX_PARALLEL=5
+RATE_LIMIT="500k"
 
 setup_environment() {
-    mkdir -p "$KIWIX_DIR" "$LIBRARY_DIR"
+    mkdir -p "$CATALOG_DIR" "$BOOKS_DIR" "$METADATA_DIR"
 }
 
-check_dependencies() {
-    local missing_packages=()
+fetch_catalog() {
+    log_message "Downloading Project Gutenberg catalogs..."
     
-    log_message "Checking dependencies..."
+    # Download and extract RDF catalog
+    log_message "Downloading RDF catalog..."
+    wget -q "${CATALOG_URLS[0]}" -O "${CATALOG_DIR}/rdf-files.tar.bz2" || {
+        log_message "${RED}Failed to download RDF catalog${NC}"
+        return 1
+    }
     
-    for package in "${REQUIRED_PACKAGES[@]}"; do
-        if ! dpkg -l | grep -q "^ii.*$package"; then
-            missing_packages+=("$package")
-        fi
-    done
+    cd "$CATALOG_DIR" || return 1
+    tar xjf rdf-files.tar.bz2 || {
+        log_message "${RED}Failed to extract RDF catalog${NC}"
+        return 1
+    }
     
-    if [ ${#missing_packages[@]} -ne 0 ]; then
-        log_message "${YELLOW}Missing required packages: ${missing_packages[*]}${NC}"
-        log_message "Installing missing packages..."
+    # Extract book IDs and URLs from RDF files
+    log_message "Processing RDF files..."
+    find . -name "pg*.rdf" -exec grep -H '<dcterms:hasFormat.*txt\.gz' {} \; | \
+        sed -n 's/.*\(https:\/\/[^"]*\.txt\.gz\).*/\1/p' > "${CATALOG_DIR}/txt_urls.txt"
+    
+    # Get book IDs
+    cut -d'/' -f5 "${CATALOG_DIR}/txt_urls.txt" | sort -u > "${CATALOG_DIR}/book_ids.txt"
+    
+    # Process metadata
+    log_message "Processing metadata..."
+    while read -r rdf_file; do
+        book_id=$(basename "$rdf_file" .rdf | sed 's/pg//')
+        title=$(grep -o '<dcterms:title>[^<]*' "$rdf_file" | cut -d'>' -f2-)
+        author=$(grep -o '<dcterms:creator>[^<]*' "$rdf_file" | cut -d'>' -f2-)
+        language=$(grep -o '<dcterms:language>[^<]*' "$rdf_file" | cut -d'>' -f2-)
         
-        if command -v apt-get &>/dev/null; then
-            sudo apt-get update && sudo apt-get install -y "${missing_packages[@]}"
-            return $?
-        else
-            log_message "${RED}Package manager not found. Please install manually: ${missing_packages[*]}${NC}"
-            return 1
-        fi
-    fi
-    return 0
+        echo "{\"id\":\"$book_id\",\"title\":\"$title\",\"author\":\"$author\",\"language\":\"$language\"}" \
+            > "${METADATA_DIR}/${book_id}.json"
+    done < <(find . -name "pg*.rdf")
+    
+    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
+    log_message "${GREEN}Found $total_books books with compressed text files${NC}"
 }
 
-install_kiwix() {
-    log_message "Installing Kiwix..."
+download_book() {
+    local book_id=$1
+    local output_dir="$BOOKS_DIR"
     
-    local kiwix_url="https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-x86_64-${KIWIX_VERSION}.tar.gz"
-    local kiwix_archive="${KIWIX_DIR}/kiwix-tools.tar.gz"
+    # Skip if already downloaded
+    if [ -f "${output_dir}/${book_id}.txt.gz" ]; then
+        return 0
+    fi
     
-    if ! wget -q "$kiwix_url" -O "$kiwix_archive"; then
-        log_message "${RED}Failed to download Kiwix${NC}"
+    # Get URL for this book
+    local url=$(grep "/${book_id}/" "${CATALOG_DIR}/txt_urls.txt" | head -1)
+    if [ -z "$url" ]; then
+        echo "${book_id}:FAILED:NO_URL:$(date +%s)" >> "$FAILED_LOG"
         return 1
     fi
     
-    if ! tar xzf "$kiwix_archive" -C "$KIWIX_DIR"; then
-        log_message "${RED}Failed to extract Kiwix${NC}"
-        rm -f "$kiwix_archive"
-        return 1
-    fi
-    
-    ln -sf "${KIWIX_DIR}/kiwix-tools_linux-x86_64-${KIWIX_VERSION}/kiwix-serve" "/usr/local/bin/kiwix-serve"
-    ln -sf "${KIWIX_DIR}/kiwix-tools_linux-x86_64-${KIWIX_VERSION}/kiwix-manage" "/usr/local/bin/kiwix-manage"
-    
-    rm -f "$kiwix_archive"
-    log_message "${GREEN}Kiwix installed successfully${NC}"
-    return 0
-}
-
-find_best_mirror() {
-    log_message "Finding fastest mirror..."
-    local best_mirror=""
-    local best_time=999999
-    
-    for mirror in "${MIRRORS[@]}"; do
-        log_message "Testing mirror: $mirror"
-        local start_time=$(date +%s.%N)
-        if curl -s --head --fail "$mirror" >/dev/null; then
-            local end_time=$(date +%s.%N)
-            local time_taken=$(echo "$end_time - $start_time" | bc)
-            
-            if (( $(echo "$time_taken < $best_time" | bc -l) )); then
-                best_time=$time_taken
-                best_mirror=$mirror
-                log_message "New best mirror: $mirror (${time_taken}s)"
-            fi
-        else
-            log_message "${YELLOW}Mirror not responding: $mirror${NC}"
-        fi
-    done
-    
-    if [ -z "$best_mirror" ]; then
-        log_message "${RED}No working mirrors found${NC}"
-        return 1
-    fi
-    
-    echo "$best_mirror"
-    return 0
-}
-
-get_latest_zim_file() {
-    local mirror="$1"
-    local file_list
-    file_list=$(curl -s "$mirror")
-    
-    echo "$file_list" | grep -o 'gutenberg_all_[0-9]\{4\}-[0-9]\{2\}.zim' | sort -r | head -1
-}
-
-download_gutenberg_zim() {
-    log_message "Setting up Gutenberg ZIM download..."
-    
-    local mirror
-    if ! mirror=$(find_best_mirror); then
-        log_message "${RED}Failed to find working mirror${NC}"
-        return 1
-    fi
-    
-    log_message "Fetching available ZIM files..."
-    local file_list
-    if ! file_list=$(curl -s "$mirror"); then
-        log_message "${RED}Failed to fetch file list${NC}"
-        return 1
-    fi
-    
-    local zim_file
-    zim_file=$(echo "$file_list" | grep -o 'gutenberg_[a-z]*_[0-9]\{4\}-[0-9]\{2\}.zim' | sort -r | head -1)
-    
-    if [ -z "$zim_file" ]; then
-        log_message "${RED}No ZIM files found${NC}"
-        return 1
-    fi
-    
-    log_message "Found latest version: $zim_file"
-    
-    local zim_path="${LIBRARY_DIR}/${zim_file}"
-    local download_url="${mirror}${zim_file}"
-    
-    log_message "Download URL: $download_url"
-    
-    if [ -f "$zim_path" ]; then
-        log_message "ZIM file exists. Verifying..."
-        if verify_zim_file "$zim_path"; then
-            log_message "${GREEN}Existing ZIM file is valid${NC}"
+    # Download compressed file directly
+    if wget --limit-rate="$RATE_LIMIT" --timeout=30 --tries=3 -q "$url" -O "${output_dir}/${book_id}.txt.gz"; then
+        if verify_compressed_file "${output_dir}/${book_id}.txt.gz"; then
+            echo "${book_id}:SUCCESS:$(date +%s)" >> "$PROGRESS_FILE"
             return 0
+        else
+            rm -f "${output_dir}/${book_id}.txt.gz"
         fi
-        log_message "${YELLOW}Existing file corrupt, redownloading...${NC}"
-        rm -f "$zim_path"
     fi
     
-    log_message "Downloading Gutenberg ZIM file..."
-    if ! wget --progress=bar:force:noscroll \
-              --tries=3 \
-              --timeout=60 \
-              --continue \
-              --no-verbose \
-              "$download_url" \
-              -O "${zim_path}.tmp"; then
-        log_message "${RED}Download failed${NC}"
-        rm -f "${zim_path}.tmp"
-        return 1
-    fi
-    
-    if verify_zim_file "${zim_path}.tmp"; then
-        mv "${zim_path}.tmp" "$zim_path"
-        log_message "${GREEN}Download successful${NC}"
-        return 0
-    else
-        rm -f "${zim_path}.tmp"
-        log_message "${RED}Downloaded file verification failed${NC}"
-        return 1
-    fi
+    echo "${book_id}:FAILED:DOWNLOAD:$(date +%s)" >> "$FAILED_LOG"
+    return 1
 }
 
-verify_zim_file() {
+verify_compressed_file() {
     local file="$1"
-    local min_size=$((1024*1024*1024))
-    local file_size
     
-    if ! file_size=$(stat -c%s "$file"); then
-        log_message "${RED}Cannot get file size: $file${NC}"
+    # Check if file exists and is not empty
+    if [ ! -s "$file" ]; then
         return 1
     fi
     
-    if [ "$file_size" -lt "$min_size" ]; then
-        log_message "${RED}File too small: $file${NC}"
+    # Try to read the compressed file
+    if ! gzip -t "$file" 2>/dev/null; then
         return 1
     fi
     
-    if ! head -c 4 "$file" | grep -q "^ZIM."; then
-        log_message "${RED}Invalid ZIM header: $file${NC}"
-        return 1
-    fi
-    
-    if ! dd if="$file" bs=1M skip=$((RANDOM % 1024)) count=1 of=/dev/null 2>/dev/null; then
-        log_message "${RED}File read test failed: $file${NC}"
+    # Check content (first few lines should contain "Project Gutenberg")
+    if ! zcat "$file" 2>/dev/null | head -n 100 | grep -q "Project Gutenberg"; then
         return 1
     fi
     
     return 0
 }
 
-setup_kiwix_service() {
-    log_message "Setting up Kiwix service..."
+download_all() {
+    local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
+    log_message "Starting download of $total_books compressed books..."
     
-    cat > /etc/systemd/system/kiwix-gutenberg.service << EOF
-[Unit]
-Description=Kiwix Gutenberg Server
-After=network.target
-Documentation=https://github.com/openzim/gutenberg
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/kiwix-serve --port 8080 ${LIBRARY_DIR}/*.zim
-Restart=always
-RestartSec=10
-User=root
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    local completed=0
+    local failed=0
     
-    systemctl daemon-reload
-    systemctl enable kiwix-gutenberg
-    systemctl start kiwix-gutenberg
+    while read -r book_id; do
+        download_book "$book_id" &
+        
+        # Limit parallel downloads
+        while [ $(jobs -r | wc -l) -ge $MAX_PARALLEL ]; do
+            wait -n
+        done
+        
+        # Update progress
+        completed=$((completed + 1))
+        if [ $((completed % 100)) -eq 0 ]; then
+            local progress=$((completed * 100 / total_books))
+            log_message "Progress: $completed/$total_books ($progress%)"
+        fi
+    done < "${CATALOG_DIR}/book_ids.txt"
     
-    if systemctl is-active --quiet kiwix-gutenberg; then
-        log_message "${GREEN}Kiwix service started successfully${NC}"
-        log_message "Access the library at: http://localhost:8080"
-        return 0
-    else
-        log_message "${RED}Failed to start Kiwix service${NC}"
-        return 1
-    fi
+    wait
+    
+    failed=$(wc -l < "$FAILED_LOG")
+    log_message "${GREEN}Download complete${NC}"
+    log_message "Total books: $total_books"
+    log_message "Failed: $failed"
+    log_message "Success rate: $(( (total_books - failed) * 100 / total_books ))%"
 }
 
 main() {
-    if ! setup_environment; then
-        log_message "${RED}Failed to create directories${NC}"
-        return 1
+    setup_environment || exit 1
+    
+    if [ ! -f "${CATALOG_DIR}/txt_urls.txt" ]; then
+        fetch_catalog || exit 1
     fi
     
-    if ! check_dependencies; then
-        log_message "${RED}Dependency check failed${NC}"
-        return 1
+    # Handle resume
+    if [ -f "$PROGRESS_FILE" ]; then
+        local total_downloaded=$(grep -c SUCCESS "$PROGRESS_FILE")
+        local total_books=$(wc -l < "${CATALOG_DIR}/book_ids.txt")
+        local percent_done=$(( (total_downloaded * 100) / total_books ))
+        
+        log_message "Previous download session found:"
+        log_message "Progress: $total_downloaded/$total_books ($percent_done%)"
+        read -p "Resume download? (y/n) " answer
+        
+        if [[ $answer =~ ^[Yy]$ ]]; then
+            comm -23 \
+                <(sort "${CATALOG_DIR}/book_ids.txt") \
+                <(grep SUCCESS "$PROGRESS_FILE" | cut -d: -f1 | sort) \
+                > "${CATALOG_DIR}/remaining_books.txt"
+            mv "${CATALOG_DIR}/remaining_books.txt" "${CATALOG_DIR}/book_ids.txt"
+        fi
     fi
     
-    if ! install_kiwix; then
-        log_message "${RED}Kiwix installation failed${NC}"
-        return 1
-    fi
+    download_all
     
-    if ! download_gutenberg_zim; then
-        log_message "${RED}ZIM file download failed${NC}"
-        return 1
+    if [ -f "${SCRIPT_DIR}/modules/webui.sh" ]; then
+        source "${SCRIPT_DIR}/modules/webui.sh"
+        setup_gutenberg_browser 8080
+        log_message "${GREEN}Web interface available at http://localhost:8080${NC}"
     fi
-    
-    if ! setup_kiwix_service; then
-        log_message "${RED}Service setup failed${NC}"
-        return 1
-    fi
-    
-    log_message "${GREEN}Project Gutenberg library setup complete!${NC}"
-    return 0
 }
 
-# Run if executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main
 fi 

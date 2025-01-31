@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Gutenberg Library</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        .search { margin: 1em 0; }
+        .book-list { margin-top: 1em; }
+        .book { border: 1px solid #ddd; padding: 1em; margin: 0.5em 0; }
+    </style>
+</head>
+<body>
+    <h1>Project Gutenberg Library</h1>
+    <div class="search">
+        <form method="GET" action="/search">
+            <input type="text" name="q" placeholder="Search books...">
+            <input type="submit" value="Search">
+        </form>
+    </div>
+    <div class="book-list">
+        {{BOOK_LIST}}
+    </div>
+</body>
+</html> 

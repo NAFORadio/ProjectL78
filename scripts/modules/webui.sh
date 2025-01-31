@@ -21,6 +21,9 @@ setup_webui() {
     # Setup static content
     setup_static_content
     
+    # Add Gutenberg browser functions
+    setup_gutenberg_browser
+    
     log_message "${GREEN}Web interface setup complete${NC}"
 }
 
@@ -281,4 +284,86 @@ setup_static_content() {
     # Set permissions
     chown -R nafo_admin:nafo_admin /var/www/nafo_radio
     chmod -R 755 /var/www/nafo_radio
+}
+
+# Add Gutenberg browser functions
+setup_gutenberg_browser() {
+    local port="${1:-8080}"
+    local html_template="${SCRIPT_DIR}/web/templates/books.html"
+    
+    # Start simple Python HTTP server
+    python3 -c "
+import http.server
+import socketserver
+import json
+import os
+import gzip
+import re
+from urllib.parse import parse_qs, urlparse
+
+LIBRARY_DIR = '${LIBRARY_DIR}'
+BOOKS_DIR = '${BOOKS_DIR}'
+METADATA_DIR = '${METADATA_DIR}'
+
+class GutenbergHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path == '/':
+            self.serve_book_list()
+        elif parsed.path == '/search':
+            query = parse_qs(parsed.query).get('q', [''])[0]
+            self.serve_search_results(query)
+        elif parsed.path.startswith('/book/'):
+            book_id = parsed.path.split('/')[-1]
+            self.serve_book(book_id)
+        else:
+            self.send_error(404)
+    
+    def serve_book_list(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        
+        with open('${html_template}', 'r') as f:
+            template = f.read()
+        
+        books = []
+        for metadata in os.listdir(METADATA_DIR):
+            if metadata.endswith('.json'):
+                with open(os.path.join(METADATA_DIR, metadata)) as f:
+                    book = json.load(f)
+                    books.append(book)
+        
+        book_list = ''.join([
+            f'<div class=\"book\"><h3>{book[\"title\"]}</h3>'
+            f'<p>By: {book[\"author\"]}</p>'
+            f'<p><a href=\"/book/{book[\"id\"]}\">Read</a></p></div>'
+            for book in sorted(books, key=lambda x: x['title'])
+        ])
+        
+        self.wfile.write(template.replace('{{BOOK_LIST}}', book_list).encode())
+    
+    def serve_book(self, book_id):
+        book_path = os.path.join(BOOKS_DIR, f'{book_id}.txt')
+        gz_path = book_path + '.gz'
+        
+        if os.path.exists(gz_path):
+            with gzip.open(gz_path, 'rt') as f:
+                content = f.read()
+        elif os.path.exists(book_path):
+            with open(book_path, 'r') as f:
+                content = f.read()
+        else:
+            self.send_error(404)
+            return
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(content.encode())
+
+with socketserver.TCPServer(('', ${port}), GutenbergHandler) as httpd:
+    print(f'Serving Gutenberg library at port {port}')
+    httpd.serve_forever()
+" &
 } 

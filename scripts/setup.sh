@@ -93,7 +93,18 @@ setup_raid() {
     mdadm --detail --scan >> /etc/mdadm/mdadm.conf
     update-initramfs -u
     
-    log_message "${GREEN}RAID setup complete.${NC}"
+    # Format the RAID array
+    log_message "Formatting RAID array..."
+    mkfs.ext4 /dev/md0
+    
+    # Create mount point and mount the array
+    mkdir -p /storage
+    mount /dev/md0 /storage
+    
+    # Add to fstab for persistent mounting
+    echo "/dev/md0    /storage    ext4    defaults    0    2" >> /etc/fstab
+    
+    log_message "${GREEN}RAID setup complete and mounted at /storage${NC}"
 }
 
 # Function to install required software

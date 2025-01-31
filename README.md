@@ -1,4 +1,4 @@
-# NAFO Radio - Off-Grid Emergency Communications System
+# NAFO Radio - Off-Grid Emergency Communications System and Suvival Database
 
 <p align="center">
   <img src="docs/assets/nafo-radio-logo.png" alt="NAFO Radio Logo" width="200"/>

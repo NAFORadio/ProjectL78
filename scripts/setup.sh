@@ -50,12 +50,35 @@ check_hardware() {
     return 0
 }
 
+# Function to check for existing RAID
+check_existing_raid() {
+    if mdadm --detail /dev/md* &>/dev/null; then
+        echo -e "${YELLOW}WARNING: Existing RAID array(s) detected.${NC}"
+        read -p "Do you want to destroy existing RAID array(s) and create a new one? (y/N): " confirm
+        if [[ $confirm =~ ^[Yy]$ ]]; then
+            log_message "User confirmed RAID destruction."
+            # Stop all arrays
+            mdadm --stop /dev/md* &>/dev/null
+            # Zero superblocks
+            mdadm --zero-superblock /dev/nvme0n1 /dev/nvme1n1
+            return 0
+        else
+            log_message "User declined RAID destruction. Exiting."
+            exit 1
+        fi
+    fi
+    return 0
+}
+
 # Function to setup RAID
 setup_raid() {
     log_message "Setting up RAID 1 array..."
     
     # Install mdadm if not present
     apt-get update && apt-get install -y mdadm
+    
+    # Check for existing RAID
+    check_existing_raid
     
     # Create RAID 1 array
     mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/nvme0n1 /dev/nvme1n1
@@ -131,13 +154,19 @@ main() {
     # Setup RAID
     setup_raid
     
-    # Install software
-    install_software
-    
-    # Create directory structure
-    create_directory_structure
-    
-    log_message "${GREEN}NAFO Radio installation complete!${NC}"
+    # Ask user if they want to install software
+    read -p "Do you want to install the required software packages now? (y/N): " install_confirm
+    if [[ $install_confirm =~ ^[Yy]$ ]]; then
+        # Install software
+        install_software
+        
+        # Create directory structure
+        create_directory_structure
+        
+        log_message "${GREEN}NAFO Radio installation complete!${NC}"
+    else
+        log_message "${YELLOW}Skipping software installation. RAID setup complete!${NC}"
+    fi
 }
 
 # Run main installation

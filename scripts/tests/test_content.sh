@@ -158,6 +158,135 @@ EOF
     return 0
 }
 
+test_web_monitor() {
+    log_message "Testing web monitoring interface..."
+    
+    # Test environment setup
+    local test_web_dir="${STORAGE_ROOT}/web_test"
+    mkdir -p "$test_web_dir"
+    
+    # Test Flask application
+    python3 - << 'EOF' > "${test_web_dir}/test_monitor.py"
+import unittest
+from download_monitor import app, download_status
+import json
+import os
+
+class TestDownloadMonitor(unittest.TestCase):
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        
+    def test_index_route(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        
+    def test_api_status(self):
+        response = self.client.get('/api/status')
+        data = json.loads(response.data)
+        self.assertIn('active', data)
+        self.assertIn('total_books', data)
+        self.assertIn('downloaded', data)
+        
+    def test_start_download(self):
+        response = self.client.post('/api/start')
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'started')
+        
+    def test_stop_download(self):
+        response = self.client.post('/api/stop')
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'stopped')
+        
+    def test_book_info(self):
+        # Create test metadata
+        os.makedirs('${METADATA_DIR}', exist_ok=True)
+        with open('${METADATA_DIR}/1234.json', 'w') as f:
+            json.dump({'id': '1234', 'title': 'Test Book'}, f)
+            
+        response = self.client.get('/api/books/1234')
+        data = json.loads(response.data)
+        self.assertEqual(data['id'], '1234')
+        self.assertEqual(data['title'], 'Test Book')
+
+if __name__ == '__main__':
+    unittest.main()
+EOF
+
+    # Test WebSocket functionality
+    python3 - << 'EOF' > "${test_web_dir}/test_websocket.py"
+import unittest
+from download_monitor import socketio
+import json
+
+class TestWebSocket(unittest.TestCase):
+    def setUp(self):
+        self.client = socketio.test_client()
+        
+    def test_status_updates(self):
+        self.client.get_received()  # Clear any existing messages
+        socketio.emit('status_update', {'active': True, 'total_books': 100})
+        received = self.client.get_received()
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0]['name'], 'status_update')
+        
+if __name__ == '__main__':
+    unittest.main()
+EOF
+
+    # Test HTML template
+    if [ ! -f "scripts/web/templates/index.html" ]; then
+        log_message "${RED}Web template file not found${NC}"
+        return 1
+    fi
+    
+    # Test systemd service file
+    if [ ! -f "scripts/web/nafo-monitor.service" ]; then
+        log_message "${RED}Service file not found${NC}"
+        return 1
+    fi
+    
+    # Run Python tests
+    log_message "Running Flask application tests..."
+    if ! python3 "${test_web_dir}/test_monitor.py" -v; then
+        log_message "${RED}Flask application tests failed${NC}"
+        return 1
+    fi
+    
+    log_message "Running WebSocket tests..."
+    if ! python3 "${test_web_dir}/test_websocket.py" -v; then
+        log_message "${RED}WebSocket tests failed${NC}"
+        return 1
+    fi
+    
+    # Test service file syntax
+    if command -v systemd-analyze > /dev/null; then
+        log_message "Validating systemd service file..."
+        if ! systemd-analyze verify "scripts/web/nafo-monitor.service"; then
+            log_message "${RED}Service file validation failed${NC}"
+            return 1
+        fi
+    fi
+    
+    # Test dependencies
+    log_message "Checking required Python packages..."
+    required_packages=(
+        "flask"
+        "flask-socketio"
+        "psutil"
+    )
+    
+    for package in "${required_packages[@]}"; do
+        if ! python3 -c "import $package" 2>/dev/null; then
+            log_message "${RED}Required package not found: $package${NC}"
+            return 1
+        fi
+    done
+    
+    log_message "${GREEN}Web monitoring interface tests passed${NC}"
+    return 0
+}
+
 test_survival_manual_downloads() {
     log_message "Testing survival manual downloads..."
     
@@ -275,6 +404,7 @@ run_all_tests() {
     test_disk_space || exit 1
     test_gutenberg_downloads || exit 1
     test_gutenberg_mass_downloader || exit 1
+    test_web_monitor || exit 1
     test_survival_manual_downloads || exit 1
     test_wikipedia_dump_access || exit 1
     

@@ -1,0 +1,1 @@
+[Previous SENSOR_CONFIGURATION.md content...] 

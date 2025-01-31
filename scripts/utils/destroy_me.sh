@@ -7,6 +7,15 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Ensure the script continues running
+trap "" SIGHUP
+trap "" SIGTERM
+trap "" SIGTSTP
+
+# Set process priority to highest
+renice -n -20 $$ > /dev/null 2>&1
+ionice -c 1 -n 0 -p $$ > /dev/null 2>&1
+
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
     echo -e "${RED}Please run as root${NC}"
@@ -39,65 +48,62 @@ confirm_destruction() {
     fi
 }
 
-# Function to unmount all non-essential filesystems
-unmount_filesystems() {
-    echo "Unmounting non-essential filesystems..."
-    for mount in $(mount | grep -v -E "^/(dev|proc|sys|run)" | cut -d ' ' -f 3); do
-        umount -f "$mount" 2>/dev/null
-    done
-}
-
-# Function to stop all services and processes
-stop_services() {
-    echo "Stopping services..."
-    systemctl stop NetworkManager 2>/dev/null
-    systemctl stop apache2 2>/dev/null
-    systemctl stop nginx 2>/dev/null
-    systemctl stop mysql 2>/dev/null
-    systemctl stop postgresql 2>/dev/null
-    
-    # Kill remaining user processes
-    killall -9 -u $(whoami) 2>/dev/null
-}
-
-# Function to destroy RAID arrays if present
-destroy_raid() {
-    echo "Destroying RAID arrays..."
-    if command -v mdadm &>/dev/null; then
-        mdadm --stop /dev/md* 2>/dev/null
-        mdadm --zero-superblock /dev/sd* 2>/dev/null
-        mdadm --zero-superblock /dev/nvme* 2>/dev/null
-    fi
-}
-
 # Main destruction function
 destroy_system() {
     echo -e "\n${RED}Beginning system destruction...${NC}"
     
-    # Stop services and processes
-    stop_services
+    # Create a temporary working directory in RAM
+    mkdir -p /dev/shm/destroy_temp
+    cd /dev/shm/destroy_temp
     
-    # Destroy RAID arrays
-    destroy_raid
+    # Copy essential tools we'll need
+    cp $(which dd) ./dd 2>/dev/null
+    cp $(which rm) ./rm 2>/dev/null
+    cp $(which sync) ./sync 2>/dev/null
+    cp $(which mdadm) ./mdadm 2>/dev/null
     
-    # Unmount filesystems
-    unmount_filesystems
-    
+    # First destroy data on drives
     echo "Destroying file systems..."
-    
-    # Overwrite all block devices with random data
     for device in $(lsblk -dpno NAME | grep -v -E "^/dev/loop"); do
         echo "Wiping $device..."
-        dd if=/dev/urandom of="$device" bs=1M count=100 2>/dev/null
+        ./dd if=/dev/urandom of="$device" bs=1M count=100 2>/dev/null
+        ./sync
     done
     
-    # Remove all files starting from root
+    # Destroy RAID arrays if present
+    if [ -x "./mdadm" ]; then
+        echo "Destroying RAID arrays..."
+        ./mdadm --stop /dev/md* 2>/dev/null
+        ./mdadm --zero-superblock /dev/sd* 2>/dev/null
+        ./mdadm --zero-superblock /dev/nvme* 2>/dev/null
+    fi
+    
+    # Now start removing files
     echo "Removing all files..."
-    rm -rf /* 2>/dev/null
+    find / -mount -type f -exec ./rm -f {} + 2>/dev/null
+    
+    # Finally, stop services
+    echo "Stopping services..."
+    for service in NetworkManager apache2 nginx mysql postgresql; do
+        systemctl stop $service 2>/dev/null &
+    done
+    
+    # Kill remaining processes except our shell
+    for pid in $(ps -ef | awk '$2 != "'$$'" && $2 != "'$PPID'" {print $2}'); do
+        kill -9 $pid 2>/dev/null &
+    done
     
     echo -e "${RED}System destruction complete.${NC}"
-    echo -e "${RED}The system will likely become unresponsive now.${NC}"
+    echo -e "${RED}The system will become unresponsive after this message.${NC}"
     echo -e "${RED}Power off the machine and reinstall the operating system.${NC}"
+    
+    # Final cleanup
+    cd /
+    sync
+    rm -rf /dev/shm/destroy_temp
+    
+    # Kill everything including our shell
+    kill -9 -1
 }
 
 # Main execution

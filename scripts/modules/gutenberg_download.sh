@@ -7,7 +7,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Configuration
-STORAGE_DIR="/Users/jason/Desktop/Share Files/Gutenberg_Library"
+STORAGE_DIR="/mnt/data/Books"
 LOG_FILE="$STORAGE_DIR/logs/gutenberg_download.log"
 CATALOG_FILE="$STORAGE_DIR/catalog.csv"
 
@@ -37,7 +37,31 @@ declare -A TOPICS=(
 # Function to log messages
 log_message() {
     echo -e "$1"
+    if [ ! -f "$LOG_FILE" ]; then
+        mkdir -p "$(dirname "$LOG_FILE")"
+    fi
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}This script must be run as root. Try using: sudo $0${NC}"
+    exit 1
+fi
+
+# Create storage directory structure
+setup_directories() {
+    log_message "${YELLOW}Creating directory structure...${NC}"
+    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
+    
+    # Set permissions
+    chown -R $SUDO_USER:$SUDO_USER "$STORAGE_DIR"
+    chmod -R 755 "$STORAGE_DIR"
+    
+    for topic in "${!TOPICS[@]}"; do
+        mkdir -p "$STORAGE_DIR/books/$topic"
+        chown $SUDO_USER:$SUDO_USER "$STORAGE_DIR/books/$topic"
+    done
 }
 
 # Function to download a book
@@ -101,7 +125,7 @@ main() {
     log_message "${YELLOW}Starting Gutenberg download process...${NC}"
     
     # Create necessary directories
-    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
+    setup_directories
     
     # Initialize catalog file
     echo "ID,Title,Topic,Filename,Date_Added" > "$CATALOG_FILE"

@@ -38,3 +38,34 @@ These scripts archive educational content from the Primitive Technology channel 
 - Mobile-friendly layout
 
 ### File Organization 
+
+## Running the Script
+
+### First Time Setup
+
+1. Download the script:
+   ```bash
+   git clone [repository-url]
+   cd nafo-radio/scripts/modules
+   ```
+
+2. Make the script executable:
+   ```bash
+   # Linux/macOS
+   chmod +x primitive_tech_downloader.sh
+   
+   # Windows
+   # No action needed
+   ```
+
+3. Install prerequisites:
+   - The script will attempt to install required packages
+   - You may need to provide sudo/admin password
+   - Follow any prompts for package installation
+
+### Running the Script
+
+#### Linux/macOS
+```bash
+./primitive_tech_downloader.sh
+``` 

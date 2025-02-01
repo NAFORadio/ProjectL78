@@ -51,3 +51,10 @@ Knowledge preservation tool for downloading and organizing Project Gutenberg con
 - `security.sh`: System hardening
 
 ## Installation 
+
+## Support the Project
+If you find this project useful, consider supporting its development:
+
+ETH Wallet: `0x4AcD49Aca41E31aa54f43e3109e7b0dB47369B65`
+
+Your support helps maintain and improve these tools for knowledge preservation. 

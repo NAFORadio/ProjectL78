@@ -69,3 +69,10 @@ These scripts archive educational content from the Primitive Technology channel 
 ```bash
 ./primitive_tech_downloader.sh
 ``` 
+
+## Support Development
+Help maintain and improve these tools:
+
+ETH Wallet: `0x4AcD49Aca41E31aa54f43e3109e7b0dB47369B65`
+
+Your support ensures continued development and maintenance of these knowledge preservation tools. 

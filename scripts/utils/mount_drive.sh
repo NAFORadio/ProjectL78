@@ -38,11 +38,11 @@ fi
 debug "Current user: $CURRENT_USER"
 
 # Simple drive listing
-echo -e "${YELLOW}Available drives:${NC}"
+echo -e "${YELLOW}Available drives and partitions:${NC}"
 echo "----------------------------------------"
 debug "Running lsblk..."
 
-# Get drives directly
+# Get drives and partitions
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep -v -E 'loop|ram|boot|^NAME'
 if [ $? -ne 0 ]; then
     handle_error "Failed to list drives"
@@ -50,9 +50,9 @@ fi
 
 echo "----------------------------------------"
 
-# Drive selection
+# Drive/Partition selection
 while true; do
-    echo -e "${YELLOW}Enter device name (e.g., sda1) or 'q' to quit:${NC}"
+    echo -e "${YELLOW}Enter partition name (e.g., sda1, nvme0n1p1) or 'q' to quit:${NC}"
     read -r choice
     
     if [ "$choice" = "q" ]; then
@@ -60,30 +60,36 @@ while true; do
         exit 0
     fi
     
+    # Check if it's a partition
+    if [[ ! "$choice" =~ p[0-9]+$ ]] && [[ ! "$choice" =~ [0-9]+$ ]]; then
+        echo -e "${RED}Please select a partition, not a disk (e.g., nvme0n1p1, not nvme0n1)${NC}"
+        continue
+    fi
+    
     if [ -b "/dev/$choice" ]; then
         DRIVE="/dev/$choice"
         break
     else
-        echo -e "${RED}Invalid device. Try again.${NC}"
+        echo -e "${RED}Invalid partition. Try again.${NC}"
     fi
 done
 
-debug "Selected drive: $DRIVE"
+debug "Selected partition: $DRIVE"
 
 # Get drive info
 debug "Getting PARTUUID..."
 PARTUUID=$(blkid -s PARTUUID -o value "$DRIVE")
 if [ -z "$PARTUUID" ]; then
-    handle_error "Could not get PARTUUID"
+    handle_error "Could not get PARTUUID. Is this a formatted partition?"
 fi
 
 debug "Getting filesystem type..."
 FS_TYPE=$(blkid -s TYPE -o value "$DRIVE")
 if [ -z "$FS_TYPE" ]; then
-    handle_error "Could not get filesystem type"
+    handle_error "Could not get filesystem type. Is this partition formatted?"
 fi
 
-echo -e "${GREEN}Drive: $DRIVE${NC}"
+echo -e "${GREEN}Partition: $DRIVE${NC}"
 echo -e "${GREEN}Type: $FS_TYPE${NC}"
 echo -e "${GREEN}PARTUUID: $PARTUUID${NC}"
 
@@ -99,7 +105,7 @@ if mountpoint -q "$MOUNT_POINT"; then
 fi
 
 # Mount
-echo -e "${YELLOW}Mounting drive...${NC}"
+echo -e "${YELLOW}Mounting partition...${NC}"
 case $FS_TYPE in
     ntfs|fuseblk)
         mount -t ntfs-3g "$DRIVE" "$MOUNT_POINT" -o uid=$(id -u $CURRENT_USER),gid=$(id -g $CURRENT_USER),umask=0002

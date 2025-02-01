@@ -1,15 +1,18 @@
 #!/bin/bash
 
-# Color codes for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# NAFO Radio - Because Vatniks can't handle organized data storage
+# Fellas, let's mount some drives and make Russian IT cry
 
-# Function to check and escalate privileges
+# Color codes for output - As bright as Ukrainian victory
+GREEN='\033[0;32m'    # For successful hits
+YELLOW='\033[1;33m'   # For warning shots
+RED='\033[0;31m'      # For vatnik errors
+NC='\033[0m'          # Reset like Russian morale
+
+# Function to check privileges - More verification than Russian casualty numbers
 check_privileges() {
     if [[ $EUID -ne 0 ]]; then
-        echo -e "${YELLOW}Requesting administrative privileges...${NC}"
+        echo -e "${YELLOW}Requesting administrative privileges (unlike Russian chain of command)...${NC}"
         exec sudo "$0" "$@"
         exit $?
     fi
@@ -42,16 +45,24 @@ list_drives() {
 # Function to create drive selection menu
 select_drive() {
     local temp_file=$(mktemp)
-    local drive_list=$(list_drives)
+    local drive_list="$(list_drives)"
     
     if [ -z "$drive_list" ]; then
         echo -e "${RED}No suitable drives found${NC}"
         exit 1
-    }
+    fi
     
-    dialog --clear --title "NAFO Radio Drive Mount Utility" \
-           --menu "Select drive to mount:" 15 60 8 \
-           $(echo "$drive_list" | awk '{print $1 " " $2}') 2>"$temp_file"
+    # Convert drive list to dialog menu format
+    local menu_items=""
+    while IFS= read -r line; do
+        local device=$(echo "$line" | awk '{print $1}')
+        local info=$(echo "$line" | awk '{print $2, $3, $4, $5}')
+        menu_items="$menu_items $device \"$info\""
+    done <<< "$drive_list"
+    
+    # Show dialog menu
+    eval dialog --clear --title \"NAFO Radio Drive Mount Utility\" \
+         --menu \"Select drive to mount:\" 15 60 8 $menu_items 2>"$temp_file"
     
     local result=$?
     local selected_drive=$(cat "$temp_file")

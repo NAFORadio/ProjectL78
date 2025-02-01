@@ -43,11 +43,17 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
-# Check if running as root
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}This script must be run as root. Try using: sudo $0${NC}"
-    exit 1
-fi
+# Function to get sudo privileges
+get_sudo() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${YELLOW}This script requires administrative privileges.${NC}"
+        sudo -v
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Failed to get administrative privileges.${NC}"
+            exit 1
+        fi
+    fi
+}
 
 # Create storage directory structure
 setup_directories() {
@@ -122,6 +128,9 @@ process_catalog() {
 
 # Main function
 main() {
+    # Get sudo privileges at the start
+    get_sudo
+    
     log_message "${YELLOW}Starting Gutenberg download process...${NC}"
     
     # Create necessary directories

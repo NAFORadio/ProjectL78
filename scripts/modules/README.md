@@ -39,6 +39,126 @@ These scripts archive educational content from the Primitive Technology channel 
 
 ### File Organization 
 
+## Detailed Menu Options
+
+### Option 1: Download videos and create index
+When you select this option, the script will:
+1. Check for required software
+   - Python3
+   - yt-dlp
+   - ffmpeg
+   - wget
+2. Create directory structure
+   - /Share Files/Primitive_Technology/
+   - /Videos/
+   - /logs/
+3. Download each video
+   - Attempts 720p quality first
+   - Falls back to 480p if needed
+   - Creates .description files
+4. Generate thumbnails
+   - 640px width previews
+   - 16:9 aspect ratio
+   - 2-second mark of video
+5. Create video index
+   - Matrix-themed HTML
+   - Clickable thumbnails
+   - Video descriptions
+   - Last updated timestamp
+Expected outcome: Complete video archive with index
+
+### Option 2: Create/update index only
+Use this when:
+- Videos already downloaded
+- Thumbnails missing
+- Index corrupted
+- Adding new videos
+
+The script will:
+1. Scan /Videos/ directory
+2. Generate missing thumbnails
+3. Extract video descriptions
+4. Create new index.html
+5. Verify all entries
+Expected outcome: Fresh index.html with all videos listed
+
+### Option 3: Generate/update thumbnails only
+Use this to:
+- Fix missing thumbnails
+- Regenerate corrupted images
+- Update thumbnail style
+- Force thumbnail refresh
+
+The script will:
+1. Scan all .mp4 files
+2. Check for matching .jpg
+3. Generate missing thumbnails
+4. Verify thumbnail integrity
+5. Report results
+Expected outcome: Complete set of thumbnails for all videos
+
+### Option 4: Verify and fix video index
+This option performs a full system check:
+1. Directory structure verification
+   - Checks all required folders
+   - Creates missing directories
+2. Video integrity check
+   - Verifies each .mp4 file
+   - Reports corrupted videos
+3. Thumbnail verification
+   - Checks all thumbnails exist
+   - Regenerates if needed
+4. Description file check
+   - Verifies .description files
+   - Reports missing descriptions
+5. Index verification
+   - Checks index.html exists
+   - Verifies all videos listed
+   - Updates if needed
+Expected outcome: Verified and fixed archive
+
+### Option q: Quit
+Safely exits the script:
+1. Completes current operations
+2. Saves any pending changes
+3. Closes log files
+4. Reports final status
+Expected outcome: Clean program exit
+
+## Common Option Combinations
+
+### First Time Setup
+1. Run Option 1
+2. Wait for completion
+3. Run Option 4 to verify
+
+### Monthly Maintenance
+1. Run Option 1 (gets new videos)
+2. Run Option 3 (fixes thumbnails)
+3. Run Option 4 (verifies everything)
+
+### Fixing Issues
+If videos don't play:
+1. Run Option 4 (verify files)
+2. Run Option 1 (re-download corrupted)
+
+If thumbnails missing:
+1. Run Option 3 (regenerate thumbnails)
+2. Run Option 2 (rebuild index)
+
+If index broken:
+1. Run Option 4 (verify all)
+2. Run Option 2 (rebuild index)
+
+## Option Outcomes Matrix
+
+| Option | Time Required | Internet Needed | Disk Space Used | Common Issues |
+|--------|---------------|-----------------|-----------------|---------------|
+| 1      | 1-3 hours    | Yes            | ~200MB/video    | Connection timeouts |
+| 2      | 1-5 minutes  | No             | ~100KB          | Permission errors |
+| 3      | 5-15 minutes | No             | ~50KB/thumbnail | FFmpeg errors |
+| 4      | 5-10 minutes | No             | None            | None typical |
+
 ## Running the Script
 
 ### First Time Setup

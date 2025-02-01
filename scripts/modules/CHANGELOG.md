@@ -2,41 +2,26 @@
 
 ## gutenberg_download.sh
 ### [2024-03-XX]
-- [FIXED] Changed macOS storage location to ~/Desktop/Storage/Books
-- Added README.md creation for storage directory
-- Added better directory location feedback
+- [FIXED] Restored working download functionality
+- [FIXED] Simplified topic processing
+- [FIXED] Added book count limits per topic
+- [FIXED] Improved download progress reporting
+- Added clear success/failure messages
+- Added download counter
+- Added per-topic progress
 - Previous changes:
-  - [FIXED] Added missing TOPICS array
-  - [FIXED] Added test books for backup
-  - [FIXED] Added actual download functionality
-  - [FIXED] Added book processing limits
-  - [FIXED] Added directory existence checks
-  - [FIXED] Added directory creation verification
-  - [FIXED] Added write permission verification
-  - Added ensure_dir function
-  - Added setup_logging function
-  - Added directory structure verification
-  - Added error handling for directory creation
-  - [FIXED] Changed Linux storage path to /home/storage/Books
-  - [FIXED] Added proper permission handling
-  - [FIXED] Added missing download functionality
-  - [FIXED] Added book processing functions
-  - [FIXED] Added topic categorization
-  - [FIXED] Added catalog processing
-  - [FIXED] Added curl-based downloads
-  - Added better download verification
-  - Added multi-mirror support
+  - [FIXED] Changed macOS storage location to ~/Desktop/Storage/Books
+  - Added README.md creation for storage directory
+  - Added better directory location feedback
+  - Added directory existence checks
+  - Added directory creation verification
+  - Added write permission verification
+  - Added proper permission handling
   - Added cross-platform support
-  - Added directory creation with proper permissions
-  - Switched to open-source EPUB viewers
-  - Added create_storage_dirs function
-  - Added OS detection and configuration
   - Added multi-format support (TXT + EPUB)
   - Added metadata generation
   - Added HTML index creation
   - [FIXED] File naming to include author
-  - [FIXED] Permission handling
-  - Added download verification
   - Improved error handling
 
 ## raid.sh

@@ -11,8 +11,38 @@ Welcome to the NAFO Radio modules collection, where we keep our specialized tool
 - Organizes books better than Russian military hierarchy
 - Creates proper metadata (unlike Russian casualty reports)
 - Includes EPUB viewer installation (better UI than Russian targeting systems)
+- Cross-platform support (more versatile than NATO equipment)
 
-Usage:
+Storage Locations:
+- Linux: `/mnt/data/Books`
+- macOS: `/Data/Storage/Books`
+
+Features:
+- Multi-format downloads (TXT + EPUB)
+- Automatic EPUB viewer installation (open-source)
+- Proper file naming with author and title
+- Metadata generation
+- HTML index creation
+- Download verification
+- Cross-platform support
+
+### 🛠️ RAID Configuration
+- Sets up RAID arrays (more redundant than Russian excuses)
+- Data protection (better than Russian OPSEC)
+- Performance optimization (faster than Russian retreats)
+
+### 🔒 Security Module
+- Hardens system like Ukrainian defense lines
+- Better password policies than Russian military security
+- Actually works (unlike Russian air defense)
+
+### 💻 Software Management
+- Package handling (more reliable than Russian supply lines)
+- Dependency resolution (clearer than Russian chain of command)
+- Clean installation (unlike Russian military recruitment)
+
+## Usage
+Each module can be run independently (unlike Russian combined arms operations):
 
 ## Overview
 These scripts archive educational content from the Primitive Technology channel for offline preservation and study.

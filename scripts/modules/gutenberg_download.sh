@@ -9,7 +9,7 @@ NC='\033[0m'
 # Configuration
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS configuration
-    STORAGE_DIR="/Data/Storage/Books"
+    STORAGE_DIR="$HOME/Library/NAFO/Books"
     # Check for Homebrew
     if ! command -v brew &> /dev/null; then
         echo -e "${YELLOW}Installing Homebrew...${NC}"
@@ -73,9 +73,7 @@ log_message() {
 # Function to create storage directory structure
 create_storage_dirs() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # Create full path for macOS
-        sudo mkdir -p "/Data/Storage"
-        sudo chown $USER "/Data/Storage"
+        # Create user-accessible directory structure
         mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
         chmod -R 755 "$STORAGE_DIR"
     else

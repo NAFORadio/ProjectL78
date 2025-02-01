@@ -6,6 +6,15 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Function to check and escalate privileges
+check_privileges() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${YELLOW}Requesting administrative privileges...${NC}"
+        exec sudo "$0" "$@"
+        exit $?
+    fi
+}
+
 # Check for dialog installation
 check_dialog() {
     if ! command -v dialog >/dev/null 2>&1; then
@@ -87,11 +96,8 @@ show_progress() {
 clear
 echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
 
-# Ensure running as root
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}This script must be run as root. Try using: sudo $0${NC}"
-   exit 1
-fi
+# Check privileges at start
+check_privileges "$@"
 
 # Check for dialog
 check_dialog

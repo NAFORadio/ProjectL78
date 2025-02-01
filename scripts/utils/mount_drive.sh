@@ -41,51 +41,52 @@ install_dialog() {
     echo -e "${GREEN}Dialog package ready for action!${NC}"
 }
 
-# Function to list available drives - More drives than working Russian tanks
-list_drives() {
-    echo -e "${YELLOW}Scanning for drives (better than Russian satellite coverage)...${NC}"
-    local drives=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT,LABEL | \
-                  grep -E 'disk|part' | \
-                  grep -v -E '/$|/boot|/boot/efi')
-    if [ -z "$drives" ]; then
-        echo -e "${RED}No drives found! Did the Russians steal our HDDs?${NC}"
-        exit 1
-    fi
-    echo "$drives"
-}
-
 # Function to create drive selection menu - Cleaner than Russian military strategy
 select_drive() {
+    echo -e "${YELLOW}Scanning for available drives...${NC}"
+    
+    # Create temporary files for dialog
     local temp_file=$(mktemp)
-    echo -e "${YELLOW}Building drive list (more organized than Russian army)...${NC}"
-    local drive_list="$(list_drives)"
     
-    # Convert drive list to dialog menu format
-    local menu_items=""
-    while IFS= read -r line; do
-        local device=$(echo "$line" | awk '{print $1}')
-        local info=$(echo "$line" | awk '{print $2, $3, $4, $5}')
-        menu_items="$menu_items $device \"$info\""
-    done <<< "$drive_list"
+    # Get list of drives excluding system partitions
+    local drives=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v -E '/$|/boot|/boot/efi')
     
-    # Show dialog menu
-    echo -e "${GREEN}Launching drive selector (more precise than Russian artillery)...${NC}"
-    dialog --clear \
-           --title "NAFO Radio Drive Mount Utility" \
-           --menu "Select drive to mount:" \
-           15 60 8 \
-           ${menu_items} 2>"${temp_file}"
-    
-    local result=$?
-    local selected_drive=$(cat "$temp_file")
-    rm -f "$temp_file"
-    
-    if [ $result -ne 0 ]; then
-        echo -e "${YELLOW}Operation cancelled (smoother exit than Russian retreat)${NC}"
-        exit 0
+    if [ -z "$drives" ]; then
+        echo -e "${RED}No suitable drives found! Did the Russians steal our hardware?${NC}"
+        exit 1
     fi
     
-    echo "$selected_drive"
+    # Create menu items
+    local menu_list=""
+    while IFS= read -r line; do
+        local dev=$(echo "$line" | awk '{print $1}')
+        local size=$(echo "$line" | awk '{print $2}')
+        local type=$(echo "$line" | awk '{print $3}')
+        menu_list="$menu_list $dev '$size $type'"
+    done <<< "$drives"
+    
+    # Display dialog menu
+    dialog --clear --title "NAFO Radio Drive Mount Utility" \
+           --menu "Select a drive to mount:" 15 60 0 \
+           $menu_list 2> "$temp_file"
+           
+    local status=$?
+    
+    if [ $status -ne 0 ]; then
+        echo -e "${YELLOW}Operation cancelled by user (unlike Russian retreats, this was planned)${NC}"
+        rm -f "$temp_file"
+        exit 1
+    fi
+    
+    local selected=$(cat "$temp_file")
+    rm -f "$temp_file"
+    
+    if [ ! -b "$selected" ]; then
+        echo -e "${RED}Invalid drive selected! As reliable as Russian equipment...${NC}"
+        exit 1
+    fi
+    
+    echo "$selected"
 }
 
 # Main script - More functional than Russian military doctrine

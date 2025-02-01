@@ -6,10 +6,17 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Check for dialog installation
+check_dialog() {
+    if ! command -v dialog >/dev/null 2>&1; then
+        echo -e "${YELLOW}Installing dialog...${NC}"
+        apt-get update -qq && apt-get install -y dialog
+    fi
+}
+
 # Function to detect current user
 detect_user() {
     local user=""
-    # Try different methods to get the real user
     for method in "logname" "who am i | awk '{print \$1}'" "echo $SUDO_USER" "id -un"; do
         user=$(eval $method 2>/dev/null)
         if [ ! -z "$user" ] && [ "$user" != "root" ]; then
@@ -21,78 +28,63 @@ detect_user() {
     exit 1
 }
 
-# Function to list available drives
-list_drives() {
-    echo -e "\n${YELLOW}Available Drives:${NC}"
-    echo "----------------------------------------"
-    printf "%-4s %-15s %-10s %-10s %s\n" "ID" "Device" "Size" "Type" "Mount"
-    echo "----------------------------------------"
-    
-    # Get list of drives excluding boot and root partitions
-    lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | \
-    grep -v -E '/$|/boot|/boot/efi' | nl -w2 -s'. '
-}
-
-# Function to select drive
+# Function to create drive selection menu
 select_drive() {
-    list_drives
+    # Create temporary files for dialog output
+    local temp_file=$(mktemp)
+    local drive_file=$(mktemp)
     
-    echo -e "\n${YELLOW}Enter the ID number of the drive to mount (or 'q' to quit):${NC}"
-    read -r selection
+    # Get drive information and format for dialog
+    lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT,LABEL | grep -E 'disk|part' | \
+    grep -v -E '/$|/boot|/boot/efi' | \
+    awk '{printf "%s\t%s %s %s %s\n", $1, $2, $3, $4, $5}' > "$drive_file"
     
-    if [[ "$selection" == "q" ]]; then
-        echo -e "${YELLOW}Exiting...${NC}"
+    # Count number of drives
+    local num_drives=$(wc -l < "$drive_file")
+    
+    # Calculate menu height (min 10, max 20)
+    local menu_height=$((num_drives + 7))
+    if [ $menu_height -gt 20 ]; then
+        menu_height=20
+    elif [ $menu_height -lt 10 ]; then
+        menu_height=10
+    fi
+    
+    # Create dialog menu items
+    local dialog_items=""
+    while IFS=$'\t' read -r device info; do
+        dialog_items="$dialog_items $device \"$info\""
+    done < "$drive_file"
+    
+    # Show dialog menu
+    eval dialog --clear --title \"NAFO Radio Drive Mount Utility\" \
+         --backtitle \"Select Drive to Mount\" \
+         --menu \"Choose the drive to mount:\" \
+         $menu_height 70 $num_drives $dialog_items 2>"$temp_file"
+    
+    local result=$?
+    local selected_drive=$(cat "$temp_file")
+    
+    # Clean up temporary files
+    rm -f "$temp_file" "$drive_file"
+    
+    # Check if user cancelled
+    if [ $result -ne 0 ]; then
+        echo -e "${YELLOW}Operation cancelled by user${NC}"
         exit 0
     fi
     
-    # Get the device path for the selected ID
-    local device=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | \
-                  grep -v -E '/$|/boot|/boot/efi' | sed -n "${selection}p" | awk '{print $1}')
-    
-    if [ -z "$device" ]; then
-        echo -e "${RED}Invalid selection${NC}"
-        exit 1
-    fi
-    
-    echo "$device"
+    echo "$selected_drive"
 }
 
-# Function to detect filesystem type
-detect_fs() {
-    local drive=$1
-    local fs_type=$(blkid -s TYPE -o value "$drive")
-    if [ -z "$fs_type" ]; then
-        echo -e "${RED}Could not determine filesystem type for $drive${NC}"
-        exit 1
-    fi
-    echo "$fs_type"
-}
-
-# Function to create fstab entry based on filesystem type
-create_fstab_entry() {
-    local partuuid=$1
-    local mount_point=$2
-    local fs_type=$3
-    local user=$4
-    
-    case $fs_type in
-        ext4)
-            echo "PARTUUID=$partuuid $mount_point ext4 defaults,noatime 0 2"
-            ;;
-        ntfs|fuseblk)
-            echo "PARTUUID=$partuuid $mount_point ntfs-3g defaults,uid=$(id -u $user),gid=$(id -g $user),umask=0002 0 0"
-            ;;
-        exfat)
-            echo "PARTUUID=$partuuid $mount_point exfat defaults,uid=$(id -u $user),gid=$(id -g $user),umask=0002 0 0"
-            ;;
-        *)
-            echo -e "${RED}Unsupported filesystem type: $fs_type${NC}"
-            exit 1
-            ;;
-    esac
+# Function to show progress
+show_progress() {
+    local message="$1"
+    echo -e "XXX\n$2\n$message\nXXX"
 }
 
 # Main script
+clear
 echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
 
 # Ensure running as root
@@ -101,15 +93,22 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Check for dialog
+check_dialog
+
 # Detect current user
 echo -e "${YELLOW}Detecting current user...${NC}"
 CURRENT_USER=$(detect_user)
 echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
 
-# Get drive selection
-echo -e "${YELLOW}Scanning for drives...${NC}"
+# Get drive selection with dialog
 DRIVE=$(select_drive)
 echo -e "${GREEN}Selected drive: $DRIVE${NC}"
+
+# Show mounting progress
+(
+echo "10" ; show_progress "Validating drive..." 10
+sleep 1
 
 # Validate drive exists
 if [ ! -b "$DRIVE" ]; then
@@ -117,35 +116,35 @@ if [ ! -b "$DRIVE" ]; then
     exit 1
 fi
 
+echo "20" ; show_progress "Getting PARTUUID..." 20
 # Get PARTUUID
 PARTUUID=$(blkid -s PARTUUID -o value "$DRIVE")
 if [ -z "$PARTUUID" ]; then
     echo -e "${RED}Error: Could not determine PARTUUID for $DRIVE${NC}"
     exit 1
 fi
-echo -e "${GREEN}Found PARTUUID: $PARTUUID${NC}"
 
+echo "30" ; show_progress "Detecting filesystem..." 30
 # Detect filesystem type
-FS_TYPE=$(detect_fs "$DRIVE")
-echo -e "${GREEN}Detected filesystem: $FS_TYPE${NC}"
-
-# Define mount point
-MOUNT_POINT="/mnt/data"
-
-# Create mount point if needed
-if [ ! -d "$MOUNT_POINT" ]; then
-    echo -e "${YELLOW}Creating mount point at $MOUNT_POINT...${NC}"
-    mkdir -p "$MOUNT_POINT"
+FS_TYPE=$(blkid -s TYPE -o value "$DRIVE")
+if [ -z "$FS_TYPE" ]; then
+    echo -e "${RED}Error: Could not determine filesystem type for $DRIVE${NC}"
+    exit 1
 fi
 
+echo "40" ; show_progress "Creating mount point..." 40
+# Define and create mount point
+MOUNT_POINT="/mnt/data"
+mkdir -p "$MOUNT_POINT"
+
+echo "50" ; show_progress "Checking current mounts..." 50
 # Unmount if already mounted
 if mountpoint -q "$MOUNT_POINT"; then
-    echo -e "${YELLOW}Unmounting existing mount...${NC}"
     umount "$MOUNT_POINT"
 fi
 
+echo "60" ; show_progress "Mounting drive..." 60
 # Mount drive
-echo -e "${YELLOW}Mounting $DRIVE to $MOUNT_POINT...${NC}"
 case $FS_TYPE in
     ntfs|fuseblk)
         mount -t ntfs-3g "$DRIVE" "$MOUNT_POINT" -o uid=$(id -u $CURRENT_USER),gid=$(id -g $CURRENT_USER),umask=0002
@@ -158,35 +157,32 @@ case $FS_TYPE in
         ;;
 esac
 
+echo "70" ; show_progress "Setting permissions..." 70
 # Set permissions
-echo -e "${YELLOW}Setting permissions...${NC}"
 chown -R "$CURRENT_USER:$CURRENT_USER" "$MOUNT_POINT"
 chmod -R 775 "$MOUNT_POINT"
 
+echo "80" ; show_progress "Updating fstab..." 80
 # Update fstab
-echo -e "${YELLOW}Updating /etc/fstab...${NC}"
-FSTAB_ENTRY=$(create_fstab_entry "$PARTUUID" "$MOUNT_POINT" "$FS_TYPE" "$CURRENT_USER")
-
-# Backup fstab
+FSTAB_ENTRY="PARTUUID=$PARTUUID $MOUNT_POINT $FS_TYPE defaults,uid=$(id -u $CURRENT_USER),gid=$(id -g $CURRENT_USER),umask=0002 0 0"
 cp /etc/fstab /etc/fstab.backup
-
-# Remove any existing entries for this mount point
 sed -i "\|$MOUNT_POINT|d" /etc/fstab
-
-# Add new entry
 echo "$FSTAB_ENTRY" >> /etc/fstab
 
+echo "90" ; show_progress "Testing configuration..." 90
 # Test fstab
-echo -e "${YELLOW}Testing new fstab configuration...${NC}"
-if mount -a; then
-    echo -e "${GREEN}Drive mounted successfully!${NC}"
-    echo -e "${GREEN}Mount will persist across reboots.${NC}"
-    echo -e "${GREEN}Backup of original fstab saved at /etc/fstab.backup${NC}"
-else
-    echo -e "${RED}Error mounting drive. Restoring original fstab...${NC}"
+if ! mount -a; then
     mv /etc/fstab.backup /etc/fstab
     exit 1
 fi
 
+echo "100" ; show_progress "Complete!" 100
+) | dialog --title "Mounting Drive" --gauge "Starting mount process..." 10 70 0
+
 # Final verification
+clear
+echo -e "${GREEN}Drive mounted successfully!${NC}"
+echo -e "${GREEN}Mount will persist across reboots.${NC}"
+echo -e "${GREEN}Backup of original fstab saved at /etc/fstab.backup${NC}"
+echo -e "\n${YELLOW}Current mount details:${NC}"
 df -h "$MOUNT_POINT" 

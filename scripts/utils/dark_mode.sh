@@ -24,37 +24,48 @@ main() {
     # Get sudo privileges
     get_sudo
     
+    # Get current user's home directory
+    USER_HOME="/home/$SUDO_USER"
+    
     echo "Installing Arc-Dark theme..."
     sudo apt update
     sudo apt install -y arc-theme
     
-    echo "Applying dark theme..."
-    sudo mkdir -p /home/$SUDO_USER/.config/gtk-3.0
-    sudo bash -c "echo -e '[Settings]\ngtk-application-prefer-dark-theme=1' > /home/$SUDO_USER/.config/gtk-3.0/settings.ini"
-    sudo chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/.config/gtk-3.0
+    echo "Applying dark theme for $SUDO_USER..."
     
-    echo "Configuring LXDE to use dark mode..."
-    sudo mkdir -p /home/$SUDO_USER/.config/lxsession/LXDE-pi
-    sudo bash -c "echo -e '[GTK]\ngtk-theme-name=Arc-Dark' > /home/$SUDO_USER/.config/lxsession/LXDE-pi/desktop.conf"
-    sudo chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/.config/lxsession
+    # Create user config directories if they don't exist
+    sudo -u "$SUDO_USER" mkdir -p "$USER_HOME/.config/gtk-3.0"
+    sudo -u "$SUDO_USER" mkdir -p "$USER_HOME/.config/lxsession/LXDE-pi"
+    sudo -u "$SUDO_USER" mkdir -p "$USER_HOME/.config/lxterminal"
     
-    echo "Setting LXTerminal dark background..."
-    sudo mkdir -p /home/$SUDO_USER/.config/lxterminal
-    sudo bash -c "echo -e '[general]\nbgcolor=#000000\nfgcolor=#ffffff' > /home/$SUDO_USER/.config/lxterminal/lxterminal.conf"
-    sudo chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/.config/lxterminal
+    # Apply GTK3 settings for user
+    sudo -u "$SUDO_USER" tee "$USER_HOME/.config/gtk-3.0/settings.ini" > /dev/null << EOF
+[Settings]
+gtk-theme-name=Arc-Dark
+gtk-application-prefer-dark-theme=1
+EOF
     
-    echo "Forcing Dark Mode in Chromium..."
-    sudo mkdir -p /home/$SUDO_USER/.config/chromium-flags.conf
-    sudo bash -c "echo '--force-dark-mode' > /home/$SUDO_USER/.config/chromium-flags.conf"
-    sudo chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/.config/chromium-flags.conf
+    # Apply LXDE settings for user
+    sudo -u "$SUDO_USER" tee "$USER_HOME/.config/lxsession/LXDE-pi/desktop.conf" > /dev/null << EOF
+[GTK]
+gtk-theme-name=Arc-Dark
+EOF
+    
+    # Apply terminal settings for user
+    sudo -u "$SUDO_USER" tee "$USER_HOME/.config/lxterminal/lxterminal.conf" > /dev/null << EOF
+[general]
+bgcolor=#000000
+fgcolor=#ffffff
+EOF
+    
+    # Set correct ownership
+    sudo chown -R "$SUDO_USER":"$SUDO_USER" "$USER_HOME/.config"
     
     echo "Restarting UI components..."
-    lxpanelctl restart
-    killall pcmanfm 2>/dev/null || true
+    sudo -u "$SUDO_USER" lxpanelctl restart
     
-    echo -e "${GREEN}Dark Mode enabled successfully!${NC}"
-    echo -e "${YELLOW}Please reboot for all changes to take effect:${NC}"
-    echo -e "${YELLOW}sudo reboot${NC}"
+    echo -e "${GREEN}Dark Mode enabled for user $SUDO_USER!${NC}"
+    echo -e "${YELLOW}Please log out and log back in for all changes to take effect.${NC}"
 }
 
 # Run main process

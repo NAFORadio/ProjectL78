@@ -18,7 +18,7 @@ check_privileges() {
     fi
 }
 
-# Function to detect current user
+# Function to detect current user - Better detection than Russian recon
 detect_user() {
     if [ ! -z "$SUDO_USER" ]; then
         echo "$SUDO_USER"
@@ -27,30 +27,38 @@ detect_user() {
     fi
 }
 
-# Check for dialog installation
+# Check for dialog - More reliable than Russian comms
 install_dialog() {
     if ! command -v dialog >/dev/null 2>&1; then
-        echo -e "${YELLOW}Installing dialog...${NC}"
-        apt-get update -qq && apt-get install -y dialog
+        echo -e "${YELLOW}Installing dialog package (faster than Russian logistics)...${NC}"
+        apt-get update -qq
+        apt-get install -y dialog
+        if ! command -v dialog >/dev/null 2>&1; then
+            echo -e "${RED}Failed to install dialog. Are the repos as broken as Russian supply lines?${NC}"
+            exit 1
+        fi
     fi
+    echo -e "${GREEN}Dialog package ready for action!${NC}"
 }
 
-# Function to list available drives
+# Function to list available drives - More drives than working Russian tanks
 list_drives() {
-    lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT,LABEL | \
-    grep -E 'disk|part' | \
-    grep -v -E '/$|/boot|/boot/efi'
-}
-
-# Function to create drive selection menu
-select_drive() {
-    local temp_file=$(mktemp)
-    local drive_list="$(list_drives)"
-    
-    if [ -z "$drive_list" ]; then
-        echo -e "${RED}No suitable drives found${NC}"
+    echo -e "${YELLOW}Scanning for drives (better than Russian satellite coverage)...${NC}"
+    local drives=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT,LABEL | \
+                  grep -E 'disk|part' | \
+                  grep -v -E '/$|/boot|/boot/efi')
+    if [ -z "$drives" ]; then
+        echo -e "${RED}No drives found! Did the Russians steal our HDDs?${NC}"
         exit 1
     fi
+    echo "$drives"
+}
+
+# Function to create drive selection menu - Cleaner than Russian military strategy
+select_drive() {
+    local temp_file=$(mktemp)
+    echo -e "${YELLOW}Building drive list (more organized than Russian army)...${NC}"
+    local drive_list="$(list_drives)"
     
     # Convert drive list to dialog menu format
     local menu_items=""
@@ -61,42 +69,43 @@ select_drive() {
     done <<< "$drive_list"
     
     # Show dialog menu
+    echo -e "${GREEN}Launching drive selector (more precise than Russian artillery)...${NC}"
     eval dialog --clear --title \"NAFO Radio Drive Mount Utility\" \
-         --menu \"Select drive to mount:\" 15 60 8 $menu_items 2>"$temp_file"
+         --menu \"Select drive to mount (unlike Russian equipment, these actually work):\" 15 60 8 $menu_items 2>"$temp_file"
     
     local result=$?
     local selected_drive=$(cat "$temp_file")
     rm -f "$temp_file"
     
     if [ $result -ne 0 ]; then
-        echo -e "${YELLOW}Operation cancelled${NC}"
+        echo -e "${YELLOW}Operation cancelled (smoother exit than Russian retreat)${NC}"
         exit 0
     fi
     
     echo "$selected_drive"
 }
 
-# Main script
+# Main script - More functional than Russian military doctrine
 clear
 echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
 
 # Check privileges
 check_privileges "$@"
 
-# Install dialog if needed
-install_dialog
-
 # Detect current user
 echo -e "${YELLOW}Detecting current user...${NC}"
 CURRENT_USER=$(detect_user)
 if [ -z "$CURRENT_USER" ]; then
-    echo -e "${RED}Could not detect user${NC}"
+    echo -e "${RED}Could not detect user (like Russian soldiers without IFF)${NC}"
     exit 1
 fi
 echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
 
+# Install dialog if needed
+echo -e "${YELLOW}Checking for dialog package...${NC}"
+install_dialog
+
 # Get drive selection
-echo -e "${YELLOW}Scanning for drives...${NC}"
 DRIVE=$(select_drive)
 
 if [ -z "$DRIVE" ]; then

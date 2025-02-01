@@ -70,8 +70,11 @@ select_drive() {
     
     # Show dialog menu
     echo -e "${GREEN}Launching drive selector (more precise than Russian artillery)...${NC}"
-    eval dialog --clear --title \"NAFO Radio Drive Mount Utility\" \
-         --menu \"Select drive to mount (unlike Russian equipment, these actually work):\" 15 60 8 $menu_items 2>"$temp_file"
+    dialog --clear \
+           --title "NAFO Radio Drive Mount Utility" \
+           --menu "Select drive to mount:" \
+           15 60 8 \
+           ${menu_items} 2>"${temp_file}"
     
     local result=$?
     local selected_drive=$(cat "$temp_file")
@@ -109,7 +112,7 @@ install_dialog
 DRIVE=$(select_drive)
 
 if [ -z "$DRIVE" ]; then
-    echo -e "${RED}No drive selected${NC}"
+    echo -e "${RED}No drive selected (like Russian tanks without fuel)${NC}"
     exit 1
 fi
 

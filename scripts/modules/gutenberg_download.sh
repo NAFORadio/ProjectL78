@@ -11,12 +11,12 @@ STORAGE_DIR="/Users/jason/Desktop/Share Files/Gutenberg_Library"
 LOG_FILE="$STORAGE_DIR/logs/gutenberg_download.log"
 CATALOG_FILE="$STORAGE_DIR/catalog.csv"
 
-# Gutenberg mirrors
+# Gutenberg mirrors with direct book download URLs
 MIRRORS=(
-    "https://www.gutenberg.org/files"
-    "https://gutenberg.pglaf.org/files"
-    "http://mirrors.xmission.com/gutenberg/files"
-    "http://gutenberg.readingroo.ms/files"
+    "https://www.gutenberg.org/cache/epub"
+    "https://gutenberg.pglaf.org/cache/epub"
+    "http://mirrors.xmission.com/gutenberg/cache/epub"
+    "http://gutenberg.readingroo.ms/cache/epub"
 )
 
 # Topics of interest with search terms
@@ -34,98 +34,63 @@ declare -A TOPICS=(
     ["military"]="military|strategy|tactics|warfare|combat|defense|army|navy|war|battle|command"
 )
 
-# Create necessary directories
-setup_directories() {
-    mkdir -p "$STORAGE_DIR"/{logs,books,catalog}
-    for topic in "${!TOPICS[@]}"; do
-        mkdir -p "$STORAGE_DIR/books/$topic"
-    done
+# Function to log messages
+log_message() {
+    echo -e "$1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
-# Try downloading from different mirrors
-download_from_mirrors() {
+# Function to download a book
+download_book() {
     local book_id="$1"
-    local format="$2"
-    local output="$3"
+    local title="$2"
+    local topic="$3"
+    local output_dir="$STORAGE_DIR/books/$topic"
     
-    for mirror in "${MIRRORS[@]}"; do
-        # Try different file patterns
-        local urls=(
-            "$mirror/$book_id/$book_id.txt"
-            "$mirror/$book_id/$book_id-0.txt"
-            "$mirror/$book_id/$book_id.pdf"
-            "$mirror/$book_id/$book_id-pdf.pdf"
-            "$mirror/$book_id/$book_id-h/$book_id-h.htm"
-        )
-        
-        for url in "${urls[@]}"; do
-            echo -e "${YELLOW}Trying: $url${NC}"
-            if wget --spider "$url" 2>/dev/null; then
-                wget -q -O "$output" "$url"
-                if [ $? -eq 0 ]; then
-                    echo -e "${GREEN}Successfully downloaded from: $url${NC}"
+    # Create topic directory if it doesn't exist
+    mkdir -p "$output_dir"
+    
+    # Try different formats in order of preference
+    for format in pdf epub.noimages txt; do
+        for mirror in "${MIRRORS[@]}"; do
+            local url="${mirror}/${book_id}/pg${book_id}.${format}"
+            log_message "${YELLOW}Attempting to download from: $url${NC}"
+            
+            if wget -q --spider "$url"; then
+                local filename="${book_id}_${title// /_}.${format}"
+                if wget -q -O "$output_dir/$filename" "$url"; then
+                    log_message "${GREEN}Successfully downloaded: $filename${NC}"
+                    echo "$book_id,$title,$topic,$filename,$(date '+%Y-%m-%d')" >> "$CATALOG_FILE"
                     return 0
                 fi
             fi
         done
     done
+    
+    log_message "${RED}Failed to download book ID: $book_id${NC}"
     return 1
 }
 
-# Download catalog
-download_catalog() {
-    echo -e "${YELLOW}Downloading Gutenberg catalog...${NC}"
+# Function to process catalog
+process_catalog() {
+    local catalog_url="https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv"
+    local catalog_file="$STORAGE_DIR/catalog/pg_catalog.csv"
     
-    # Try to get the catalog from different sources
-    local catalog_urls=(
-        "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
-        "https://gutenberg.pglaf.org/cache/epub/feeds/rdf-files.tar.bz2"
-    )
+    log_message "${YELLOW}Downloading Gutenberg catalog...${NC}"
+    mkdir -p "$STORAGE_DIR/catalog"
     
-    for url in "${catalog_urls[@]}"; do
-        wget -q -O "$STORAGE_DIR/catalog/catalog.tar.bz2" "$url"
-        if [ $? -eq 0 ]; then
-            tar xjf "$STORAGE_DIR/catalog/catalog.tar.bz2" -C "$STORAGE_DIR/catalog/"
-            return 0
-        fi
-    done
+    if ! wget -q -O "$catalog_file" "$catalog_url"; then
+        log_message "${RED}Failed to download catalog${NC}"
+        exit 1
+    fi
     
-    echo -e "${RED}Failed to download catalog${NC}"
-    return 1
-}
-
-# Process and download books
-process_books() {
-    echo -e "${YELLOW}Processing books...${NC}"
-    local count=0
-    
-    # Create catalog header
-    echo "ID,Title,Author,Topic,Format,Path,Date_Added" > "$CATALOG_FILE"
-    
-    # Process each RDF file
-    find "$STORAGE_DIR/catalog" -name "*.rdf" | while read rdf_file; do
-        local book_id=$(grep -o "ebooks/[0-9]*" "$rdf_file" | head -1 | cut -d'/' -f2)
-        local title=$(grep -o "<dcterms:title>.*</dcterms:title>" "$rdf_file" | head -1 | sed 's/<[^>]*>//g')
-        local author=$(grep -o "<pgterms:name>.*</pgterms:name>" "$rdf_file" | head -1 | sed 's/<[^>]*>//g')
-        local subject=$(grep -o "<dcterms:subject>.*</dcterms:subject>" "$rdf_file" | sed 's/<[^>]*>//g')
-        
-        # Check if book matches our topics
+    # Skip header line and process each book
+    tail -n +2 "$catalog_file" | while IFS=, read -r id title author subject; do
         for topic in "${!TOPICS[@]}"; do
             if echo "$subject $title" | grep -iE "${TOPICS[$topic]}" > /dev/null; then
-                count=$((count + 1))
-                echo -e "\n${YELLOW}Found matching book ($count):${NC}"
-                echo -e "Title: $title"
-                echo -e "Author: $author"
-                echo -e "Topic: $topic"
-                
-                local output_dir="$STORAGE_DIR/books/$topic"
-                local safe_title=$(echo "$title" | tr -dc '[:alnum:][:space:]' | tr '[:space:]' '_')
-                local output_file="$output_dir/${book_id}_${safe_title}"
-                
-                # Try to download the book
-                if download_from_mirrors "$book_id" "txt" "$output_file.txt"; then
-                    echo "$book_id,$title,$author,$topic,txt,$output_file.txt,$(date '+%Y-%m-%d')" >> "$CATALOG_FILE"
-                fi
+                log_message "${YELLOW}Processing: $title${NC}"
+                download_book "$id" "$title" "$topic"
+                break
             fi
         done
     done
@@ -133,19 +98,19 @@ process_books() {
 
 # Main function
 main() {
-    echo -e "${YELLOW}NAFO Radio Gutenberg Knowledge Acquisition Tool${NC}"
-    echo -e "${YELLOW}Starting download process...${NC}"
+    log_message "${YELLOW}Starting Gutenberg download process...${NC}"
     
-    setup_directories
+    # Create necessary directories
+    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
     
-    if download_catalog; then
-        process_books
-        echo -e "${GREEN}Download complete!${NC}"
-        echo -e "Books have been saved to: $STORAGE_DIR"
-    else
-        echo -e "${RED}Failed to download catalog. Exiting.${NC}"
-        exit 1
-    fi
+    # Initialize catalog file
+    echo "ID,Title,Topic,Filename,Date_Added" > "$CATALOG_FILE"
+    
+    # Process catalog and download books
+    process_catalog
+    
+    log_message "${GREEN}Download process complete${NC}"
+    log_message "Books have been saved to: $STORAGE_DIR"
 }
 
 # Run main process

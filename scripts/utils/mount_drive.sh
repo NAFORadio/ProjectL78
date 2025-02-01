@@ -21,50 +21,40 @@ detect_user() {
     exit 1
 }
 
-# Function to display drive selection interface
-select_drive() {
-    echo -e "\n${YELLOW}Scanning available drives...${NC}"
-    
-    # Get list of drives and their details
+# Function to list available drives
+list_drives() {
     echo -e "\n${YELLOW}Available Drives:${NC}"
     echo "----------------------------------------"
-    echo -e "ID\tSize\tType\tDevice"
+    printf "%-4s %-15s %-10s %-10s %s\n" "ID" "Device" "Size" "Type" "Mount"
     echo "----------------------------------------"
     
-    # Create arrays to store drive info
-    mapfile -t DRIVES < <(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v 'boot')
+    # Get list of drives excluding boot and root partitions
+    lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | \
+    grep -v -E '/$|/boot|/boot/efi' | nl -w2 -s'. '
+}
+
+# Function to select drive
+select_drive() {
+    list_drives
     
-    if [ ${#DRIVES[@]} -eq 0 ]; then
-        echo -e "${RED}No drives found!${NC}"
+    echo -e "\n${YELLOW}Enter the ID number of the drive to mount (or 'q' to quit):${NC}"
+    read -r selection
+    
+    if [[ "$selection" == "q" ]]; then
+        echo -e "${YELLOW}Exiting...${NC}"
+        exit 0
+    fi
+    
+    # Get the device path for the selected ID
+    local device=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | \
+                  grep -v -E '/$|/boot|/boot/efi' | sed -n "${selection}p" | awk '{print $1}')
+    
+    if [ -z "$device" ]; then
+        echo -e "${RED}Invalid selection${NC}"
         exit 1
     fi
     
-    # Display drives with numbers
-    for i in "${!DRIVES[@]}"; do
-        echo -e "$((i+1)).\t${DRIVES[$i]}"
-    done
-    
-    # Get user selection
-    while true; do
-        echo -e "\n${YELLOW}Select drive by number (1-${#DRIVES[@]}) or 'q' to quit:${NC}"
-        read -r selection
-        
-        # Check for quit
-        if [[ $selection == "q" ]]; then
-            echo -e "${YELLOW}Exiting...${NC}"
-            exit 0
-        fi
-        
-        # Validate selection
-        if [[ $selection =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#DRIVES[@]}" ]; then
-            # Extract device path from selected drive
-            SELECTED_DRIVE=$(echo "${DRIVES[$((selection-1))]}" | awk '{print $1}')
-            echo "$SELECTED_DRIVE"
-            return 0
-        else
-            echo -e "${RED}Invalid selection. Please choose 1-${#DRIVES[@]} or 'q' to quit${NC}"
-        fi
-    done
+    echo "$device"
 }
 
 # Function to detect filesystem type
@@ -111,11 +101,13 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Detect current user
 echo -e "${YELLOW}Detecting current user...${NC}"
 CURRENT_USER=$(detect_user)
 echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
 
 # Get drive selection
+echo -e "${YELLOW}Scanning for drives...${NC}"
 DRIVE=$(select_drive)
 echo -e "${GREEN}Selected drive: $DRIVE${NC}"
 

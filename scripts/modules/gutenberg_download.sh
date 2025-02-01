@@ -13,15 +13,17 @@ else
     STORAGE_DIR="/home/storage/Books"
 fi
 
-LOG_FILE="$STORAGE_DIR/logs/gutenberg_download.log"
-CATALOG_FILE="$STORAGE_DIR/catalog.csv"
-FAILED_BOOKS_LOG="$STORAGE_DIR/logs/failed_books.csv"
+# Define catalog sources
+CATALOG_SOURCES=(
+    "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv"
+    "https://gutenberg.pglaf.org/cache/epub/feeds/pg_catalog.csv"
+    "http://mirrors.xmission.com/gutenberg/feeds/pg_catalog.csv"
+    "http://gutenberg.readingroo.ms/feeds/pg_catalog.csv"
+    "https://raw.githubusercontent.com/GITenberg/GITenberg.github.io/master/pg_catalog.csv"
+    "https://gutenberg.polytechnic.edu.na/feeds/pg_catalog.csv"
+)
 
-# Retry configuration
-MAX_RETRIES=3
-RETRY_DELAY=5
-
-# Gutenberg mirrors
+# Define mirrors
 MIRRORS=(
     "https://www.gutenberg.org/cache/epub"
     "https://gutenberg.pglaf.org/cache/epub"
@@ -29,88 +31,80 @@ MIRRORS=(
     "http://gutenberg.readingroo.ms/cache/epub"
     "https://gutenberg.org/cache/epub"
     "http://aleph.gutenberg.org/cache/epub"
-    "http://gutenberg.readingroo.ms/cache/epub"
     "http://gutenberg.localhost.net.ar/cache/epub"
     "http://gutenberg.polytechnic.edu.na/cache/epub"
     "http://gutenberg.cs.uiuc.edu/cache/epub"
     "http://eremita.di.uminho.pt/gutenberg/cache/epub"
     "http://mirror.csclub.uwaterloo.ca/gutenberg/cache/epub"
-    "http://mirrors.xmission.com/gutenberg/cache/epub"
-    "http://gutenberg.mirror.quintex.com/cache/epub"
 )
 
-# Topics as arrays instead of associative arrays
-TOPICS=(
-    "science:science|physics|chemistry|biology|astronomy|laboratory|experiment|scientific"
-    "history:history|war|revolution|biography|civilization|empire|historical|conquest"
-    "mathematics:mathematics|algebra|geometry|calculus|arithmetic|mathematical|computation"
-    "survival:survival|wilderness|outdoor|camping|hunting|fishing|bushcraft|emergency"
-    "gardening:gardening|horticulture|plants|flowers|vegetables|botanical|cultivation"
-    "philosophy:philosophy|ethics|logic|metaphysics|philosophical|reasoning|wisdom"
-    "farming:farming|agriculture|livestock|crops|husbandry|dairy|agricultural"
-    "electronics:electricity|electronics|circuits|electrical|radio|telegraph|engineering"
-    "mechanics:mechanics|machinery|engines|mechanical|engineering|motors|machines"
-    "programming:computation|computer|algorithm|calculation|programming|mathematical"
+# Topic patterns
+TOPIC_PATTERNS=(
+    "mathematics:math|algebra|geometry|calculus"
+    "science:science|physics|chemistry|biology"
+    "history:history|war|revolution|civilization"
+    "philosophy:philosophy|ethics|logic|metaphysics"
+    "gardening:gardening|plants|flowers|botanical"
+    "farming:farming|agriculture|livestock|crops"
+    "electronics:electronics|circuits|electrical|radio"
+    "mechanics:mechanics|engines|mechanical|machines"
+    "programming:programming|computer|algorithm"
+    "survival:survival|wilderness|outdoor|emergency"
+    "fiction:fiction|novel|story|tales"
+    "poetry:poetry|poems|verse|rhyme"
+    "drama:drama|play|theatre|tragedy"
+    "cooking:cooking|recipe|food|culinary"
+    "art:art|painting|sculpture|drawing"
+    "music:music|song|melody|musical"
+    "religion:religion|spiritual|divine|sacred"
+    "medicine:medicine|medical|health|anatomy"
+    "law:law|legal|justice|courts"
+    "education:education|teaching|learning|school"
 )
 
-# Known good books as arrays
-KNOWN_BOOKS=(
-    "science:103:The Principles of Chemistry:Mendeleev"
-    "science:2713:Relativity\: The Special and General Theory:Einstein"
-    "history:2591:The Art of War:Sun Tzu"
-    "history:1404:The Decline and Fall of the Roman Empire:Gibbon"
-    "mathematics:13700:The Elements of Euclid:Euclid"
-    "mathematics:21690:A Treatise on Algebra:Hall"
-    "survival:26989:Woodcraft:Nessmuk"
-    "survival:28255:The Book of Camp-Lore and Woodcraft:Beard"
-    "gardening:24494:Garden Design and Architects Gardens:Sedding"
-    "gardening:23858:The Wild Garden:Robinson"
-    "philosophy:1656:The Republic:Plato"
-    "philosophy:1497:The Ethics:Spinoza"
-    "farming:24500:Farming for Boys:Morris"
-    "farming:25064:The First Book of Farming:Goodrich"
-    "electronics:29784:The Radio Amateur's Hand Book:Collins"
-    "electronics:29095:Electricity for Boys:Adams"
-    "mechanics:30288:The Steam Engine Explained:Dionysius"
-    "mechanics:12083:Gas and Oil Engines:Clerk"
-    "programming:27635:Mathematical Analysis:Hardy"
-    "programming:33283:The Calculus of Variations:Todhunter"
+# Initialize files
+CATALOG_FILE="$STORAGE_DIR/catalog.csv"
+LOG_FILE="$STORAGE_DIR/logs/download.log"
+STATS_FILE="$STORAGE_DIR/logs/stats.json"
+FAILED_LOG="$STORAGE_DIR/logs/failed.csv"
+
+# Use regular arrays instead of associative arrays
+TOPIC_PATTERNS=(
+    "mathematics:math|algebra|geometry|calculus"
+    "science:science|physics|chemistry|biology"
+    "history:history|war|revolution|civilization"
+    "philosophy:philosophy|ethics|logic|metaphysics"
+    "gardening:gardening|plants|flowers|botanical"
+    "farming:farming|agriculture|livestock|crops"
+    "electronics:electronics|circuits|electrical|radio"
+    "mechanics:mechanics|engines|mechanical|machines"
+    "programming:programming|computer|algorithm"
+    "survival:survival|wilderness|outdoor|emergency"
+    "fiction:fiction|novel|story|tales"
+    "poetry:poetry|poems|verse|rhyme"
+    "drama:drama|play|theatre|tragedy"
+    "cooking:cooking|recipe|food|culinary"
+    "art:art|painting|sculpture|drawing"
+    "music:music|song|melody|musical"
+    "religion:religion|spiritual|divine|sacred"
+    "medicine:medicine|medical|health|anatomy"
+    "law:law|legal|justice|courts"
+    "education:education|teaching|learning|school"
 )
 
-# EPUB viewer options (in order of preference)
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    EPUB_VIEWERS=(
-        "sigil"        # Open source EPUB editor/viewer
-        "coolreader"   # Open source e-book viewer
-        "calibre"      # Open source e-book management
-    )
-else
-    EPUB_VIEWERS=(
-        "calibre"
-        "foliate"
-        "fbreader"
-    )
-fi
-
-# Function to log messages
-log_message() {
-    echo -e "$1"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-}
-
-# Function to log failed book
-log_failed_book() {
-    local id="$1"
-    local title="$2"
-    local author="$3"
-    local reason="$4"
-    
-    # Create failed books log if it doesn't exist
-    if [ ! -f "$FAILED_BOOKS_LOG" ]; then
-        echo "ID,Title,Author,Reason,Date" > "$FAILED_BOOKS_LOG"
-    fi
-    
-    echo "$id,\"$title\",\"$author\",\"$reason\",$(date '+%Y-%m-%d %H:%M:%S')" >> "$FAILED_BOOKS_LOG"
+# Function to get topic from subject
+get_topic() {
+    local subject=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+    for topic_pattern in "${TOPIC_PATTERNS[@]}"; do
+        local topic=${topic_pattern%%:*}
+        local pattern=${topic_pattern#*:}
+        if echo "$subject" | grep -qE "$pattern"; then
+            echo "$topic"
+            return 0
+        fi
+    done
+    echo "other"
+    return 0
 }
 
 # Function to test mirror speed
@@ -119,168 +113,362 @@ test_mirror_speed() {
     local test_file="1/pg1.txt"
     local start_time end_time duration
     
+    echo -n "Testing $mirror... "
     start_time=$(date +%s.%N)
-    if curl -s "${mirror}/${test_file}" -o /dev/null; then
+    if curl -s --head "${mirror}/${test_file}" | grep -q "200 OK"; then
         end_time=$(date +%s.%N)
         duration=$(echo "$end_time - $start_time" | bc)
+        echo -e "${GREEN}OK${NC} (${duration}s)"
         echo "$duration $mirror"
     else
+        echo -e "${RED}Failed${NC}"
         echo "999999 $mirror"
     fi
 }
 
-# Function to sort mirrors by speed
-sort_mirrors() {
-    log_message "${YELLOW}Testing mirror speeds...${NC}"
-    local temp_file=$(mktemp)
+# Function to update statistics
+update_stats() {
+    local total="$1"
+    local current="$2"
+    local epub_count="$3"
+    local txt_count="$4"
+    local failed="$5"
     
-    for mirror in "${MIRRORS[@]}"; do
-        log_message "Testing: $mirror"
-        test_mirror_speed "$mirror" >> "$temp_file"
+    # Calculate percentages
+    local progress=$((current * 100 / total))
+    local success=$((epub_count + txt_count))
+    local success_rate=$((success * 100 / current))
+    
+    # Create statistics JSON
+    cat > "$STATS_FILE" << EOF
+{
+    "total": $total,
+    "processed": $current,
+    "progress": $progress,
+    "epub_count": $epub_count,
+    "txt_count": $txt_count,
+    "failed": $failed,
+    "success_rate": $success_rate,
+    "topics": {
+EOF
+    
+    # Add topic statistics
+    local first=true
+    for topic in "${!TOPICS[@]}"; do
+        local count=$(find "$STORAGE_DIR/books/$topic" -type f 2>/dev/null | wc -l)
+        if [ "$first" = true ]; then
+            first=false
+        else
+            echo "," >> "$STATS_FILE"
+        fi
+        echo "        \"$topic\": $count" >> "$STATS_FILE"
     done
     
-    SORTED_MIRRORS=()
-    while read -r speed mirror; do
-        if [ "$speed" != "999999" ]; then
-            SORTED_MIRRORS+=("$mirror")
-            log_message "${GREEN}Mirror: $mirror - Speed: ${speed}s${NC}"
-        else
-            log_message "${RED}Mirror failed: $mirror${NC}"
-        fi
-    done < <(sort -n "$temp_file")
+    echo "    }" >> "$STATS_FILE"
+    echo "}" >> "$STATS_FILE"
     
-    rm -f "$temp_file"
-    
-    if [ ${#SORTED_MIRRORS[@]} -eq 0 ]; then
-        log_message "${RED}No responsive mirrors found${NC}"
-        exit 1
-    fi
-    
-    log_message "${GREEN}Using fastest mirror: ${SORTED_MIRRORS[0]}${NC}"
+    # Print progress
+    echo -e "\n${YELLOW}Progress: $current/$total ($progress%)${NC}"
+    echo -e "EPUB: $epub_count | TXT: $txt_count | Failed: $failed"
+    echo -e "Success Rate: $success_rate%\n"
 }
 
-# Function to retry downloads
-retry_download() {
-    local url="$1"
-    local output="$2"
-    local attempt=1
+# Function to download catalog with better error handling
+download_catalog() {
+    local output_file="$1"
+    local downloaded=0
     
-    while [ $attempt -le $MAX_RETRIES ]; do
-        log_message "Download attempt $attempt of $MAX_RETRIES..."
+    echo -e "\n${YELLOW}Attempting to download catalog from multiple sources...${NC}"
+    
+    for source in "${CATALOG_SOURCES[@]}"; do
+        echo -e "Trying: $source"
         
-        if curl -s -o "$output" "$url"; then
-            log_message "${GREEN}Download successful on attempt $attempt${NC}"
-            return 0
-        else
-            log_message "${YELLOW}Attempt $attempt failed${NC}"
-            if [ $attempt -lt $MAX_RETRIES ]; then
-                log_message "Waiting ${RETRY_DELAY} seconds before retry..."
-                sleep $RETRY_DELAY
+        if curl -m 300 --retry 3 --retry-delay 5 -s "$source" -o "$output_file.tmp"; then
+            if [ -s "$output_file.tmp" ]; then
+                if head -n 1 "$output_file.tmp" | grep -q "Text#\|Title\|Author"; then
+                    mv "$output_file.tmp" "$output_file"
+                    echo -e "${GREEN}Successfully downloaded catalog from $source${NC}"
+                    downloaded=1
+                    
+                    # Cache the successful download
+                    mkdir -p "$STORAGE_DIR/cache"
+                    cp "$output_file" "$STORAGE_DIR/cache/pg_catalog_cache.csv"
+                    echo -e "${GREEN}Cached catalog for future use${NC}"
+                    
+                    return 0
+                else
+                    echo -e "${RED}Downloaded file appears invalid (wrong format)${NC}"
+                fi
+            else
+                echo -e "${RED}Downloaded file is empty${NC}"
             fi
-            ((attempt++))
+            rm -f "$output_file.tmp"
+        else
+            echo -e "${RED}Failed to download from $source${NC}"
         fi
     done
     
+    # Try to use cached catalog if download failed
+    local cache_file="$STORAGE_DIR/cache/pg_catalog_cache.csv"
+    if [ -f "$cache_file" ] && [ -s "$cache_file" ]; then
+        echo -e "${YELLOW}Using cached catalog from: $cache_file${NC}"
+        cp "$cache_file" "$output_file"
+        return 0
+    fi
+    
+    echo -e "${RED}Failed to obtain catalog from any source${NC}"
     return 1
 }
 
-# Function to download a book
-download_book() {
-    local book_id="$1"
-    local title="$2"
-    local author="$3"
-    local subject="$4"
-    local output_dir="$STORAGE_DIR/books"
+# Function to parse catalog
+parse_catalog() {
+    local input_file="$1"
+    local output_file="$2"
+    local total_lines=$(wc -l < "$input_file")
+    local processed=0
     
-    mkdir -p "$output_dir"
+    echo -e "\n${YELLOW}Parsing catalog entries...${NC}"
     
-    local safe_title=$(echo "$title" | tr -cd '[:alnum:] ._-' | tr ' ' '_')
-    local safe_author=$(echo "$author" | tr -cd '[:alnum:] ._-' | tr ' ' '_')
+    # Create temporary directory for processing
+    local temp_dir=$(mktemp -d)
+    local chunk_size=1000
+    local chunk_number=0
     
-    # Try EPUB first
-    log_message "${YELLOW}Checking for EPUB version of: $title${NC}"
-    for mirror in "${SORTED_MIRRORS[@]}"; do
-        local url="${mirror}/${book_id}/pg${book_id}.epub"
-        local filename="${book_id}_${safe_author}_${safe_title}.epub"
-        local full_path="$output_dir/$filename"
+    # Split catalog into chunks for parallel processing
+    split -l $chunk_size "$input_file" "$temp_dir/chunk_"
+    
+    # Process each chunk
+    for chunk in "$temp_dir"/chunk_*; do
+        ((chunk_number++))
+        echo -e "Processing chunk $chunk_number..."
         
-        if curl -s --head "$url" | head -n 1 | grep "HTTP/1.[01] [23].*" > /dev/null; then
-            log_message "Downloading EPUB from $mirror"
+        while IFS=, read -r id title author subject language; do
+            ((processed++))
             
-            if retry_download "$url" "$full_path"; then
-                log_message "${GREEN}Successfully downloaded EPUB: $filename${NC}"
-                echo "$book_id,$title,$author,$subject,$filename,epub,$(date '+%Y-%m-%d'),$full_path" >> "$CATALOG_FILE"
-                return 0
+            # Show progress every 1000 entries
+            if ((processed % 1000 == 0)); then
+                echo -e "${GREEN}Processed $processed of $total_lines entries${NC}"
             fi
-        fi
+            
+            # Clean up fields
+            title=$(echo "$title" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
+            author=$(echo "$author" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
+            subject=$(echo "$subject" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
+            
+            # Skip if any required field is empty
+            [ -z "$id" ] || [ -z "$title" ] || [ -z "$author" ] && continue
+            
+            # Write valid entries
+            echo "$id,$title,$author,$subject,$language" >> "$output_file"
+        done < "$chunk"
     done
+    
+    # Cleanup
+    rm -rf "$temp_dir"
+    
+    # Verify results
+    local valid_entries=$(wc -l < "$output_file")
+    echo -e "\n${GREEN}Found $valid_entries valid books to process${NC}"
+    
+    return 0
+}
+
+# Progress bar function
+progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local filled=$((percentage * width / 100))
+    local empty=$((width - filled))
+    
+    printf "\rProgress: ["
+    printf "%${filled}s" '' | tr ' ' '█'
+    printf "%${empty}s" '' | tr ' ' '░'
+    printf "] %3d%% (%d/%d)" "$percentage" "$current" "$total"
+}
+
+# Speed calculation function
+calculate_speed() {
+    local start_time=$1
+    local current=$2
+    local total=$3
+    
+    local current_time=$(date +%s)
+    local elapsed=$((current_time - start_time))
+    local speed=0
+    local eta=0
+    
+    if [ $elapsed -gt 0 ]; then
+        speed=$(echo "scale=2; $current / $elapsed" | bc)
+        remaining=$((total - current))
+        eta=$(echo "scale=0; $remaining / $speed" | bc 2>/dev/null || echo "calculating...")
+    fi
+    
+    echo "$speed:$eta"
+}
+
+# Parallel download function using GNU Parallel if available
+parallel_download() {
+    local book_ids=("$@")
+    local jobs=5  # Number of concurrent downloads
+    
+    if command -v parallel >/dev/null; then
+        printf "%s\n" "${book_ids[@]}" | parallel -j $jobs download_single_book
+    else
+        for id in "${book_ids[@]}"; do
+            download_single_book "$id"
+        done
+    fi
+}
+
+# Single book download function
+download_single_book() {
+    local id="$1"
+    local mirror="$2"
+    local output_dir="$3"
+    
+    # Try EPUB first with shorter timeout
+    curl -m 30 -s "$mirror/$id/pg$id.epub" -o "$output_dir/$id.epub" && return 0
     
     # Try TXT if EPUB fails
-    log_message "${YELLOW}No EPUB found, trying TXT version...${NC}"
-    for mirror in "${SORTED_MIRRORS[@]}"; do
-        local url="${mirror}/${book_id}/pg${book_id}.txt"
-        local filename="${book_id}_${safe_author}_${safe_title}.txt"
-        local full_path="$output_dir/$filename"
-        
-        if curl -s --head "$url" | head -n 1 | grep "HTTP/1.[01] [23].*" > /dev/null; then
-            log_message "Downloading TXT from $mirror"
-            
-            if retry_download "$url" "$full_path"; then
-                log_message "${YELLOW}Successfully downloaded TXT: $filename${NC}"
-                echo "$book_id,$title,$author,$subject,$filename,txt,$(date '+%Y-%m-%d'),$full_path" >> "$CATALOG_FILE"
-                return 0
-            fi
-        fi
-    done
+    curl -m 30 -s "$mirror/$id/pg$id.txt" -o "$output_dir/$id.txt" && return 0
     
-    log_failed_book "$book_id" "$title" "$author" "Failed after $MAX_RETRIES retries"
     return 1
 }
 
-# Main function
-main() {
-    log_message "Starting Gutenberg download process..."
-    mkdir -p "$STORAGE_DIR/books" "$STORAGE_DIR/logs"
+# Main processing function with improved progress
+process_books() {
+    local catalog_file="$1"
+    local start_time=$(date +%s)
+    local batch_size=10
+    local batch=()
+    local processed=0
+    local total=$(wc -l < "$catalog_file")
     
-    # Initialize catalog
-    echo "ID,Title,Author,Subject,Filename,Format,Date_Added,Full_Path" > "$CATALOG_FILE"
-    
-    # Sort mirrors by speed
-    sort_mirrors
-    
-    # Process catalog
-    local catalog_url="https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv"
-    local catalog_file="$STORAGE_DIR/catalog/pg_catalog.csv"
-    
-    mkdir -p "$STORAGE_DIR/catalog"
-    
-    log_message "Downloading Gutenberg catalog..."
-    if ! curl -s -o "$catalog_file" "$catalog_url"; then
-        log_message "${RED}Failed to download catalog${NC}"
-        exit 1
-    fi
-    
-    local total=0
-    local success=0
+    echo -e "\n${YELLOW}Starting download process with parallel processing${NC}"
+    echo -e "Using batch size: $batch_size"
     
     while IFS=, read -r id title author subject language; do
         [ "$id" = "Text#" ] && continue
+        ((processed++))
         
-        ((total++))
-        title=$(echo "$title" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
-        author=$(echo "$author" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
-        subject=$(echo "$subject" | tr -d '"' | sed 's/^\s*//;s/\s*$//')
+        # Add to current batch
+        batch+=("$id")
         
-        log_message "Processing ($total): $title by $author"
-        
-        if download_book "$id" "$title" "$author" "$subject"; then
-            ((success++))
+        # Process batch when full
+        if [ ${#batch[@]} -eq $batch_size ]; then
+            parallel_download "${batch[@]}"
+            batch=()
+            
+            # Calculate speed and ETA
+            local speed_eta=$(calculate_speed "$start_time" "$processed" "$total")
+            local speed=${speed_eta%:*}
+            local eta=${speed_eta#*:}
+            
+            # Clear line and show progress
+            echo -en "\033[2K"  # Clear line
+            progress_bar "$processed" "$total"
+            printf " | %.2f books/s | ETA: %ss" "$speed" "$eta"
+            
+            # Show detailed stats every 100 books
+            if ((processed % 100 == 0)); then
+                echo -e "\n${GREEN}Statistics:${NC}"
+                echo "EPUB: $epub_count | TXT: $txt_count | Failed: $failed"
+                echo "Storage used: $(du -h "$STORAGE_DIR" | tail -n1 | cut -f1)"
+                echo -e "Time elapsed: $(($(date +%s) - start_time))s\n"
+            fi
         fi
     done < "$catalog_file"
     
-    log_message "${GREEN}Download complete!${NC}"
-    log_message "Total books processed: $total"
-    log_message "Successfully downloaded: $success"
+    # Process remaining books in last batch
+    if [ ${#batch[@]} -gt 0 ]; then
+        parallel_download "${batch[@]}"
+    fi
+}
+
+# Update main function
+main() {
+    echo -e "${GREEN}Starting Gutenberg Download Script${NC}"
+    
+    # Create directories
+    for topic in "${!TOPICS[@]}"; do
+        mkdir -p "$STORAGE_DIR/books/$topic"
+    done
+    mkdir -p "$STORAGE_DIR/logs"
+    
+    # Initialize catalog
+    echo "ID,Title,Author,Subject,Filename,Format,Date,Path,Topic" > "$CATALOG_FILE"
+    echo "ID,Title,Author,Reason,Date" > "$FAILED_LOG"
+    
+    # Test mirrors
+    echo -e "\n${YELLOW}Testing mirrors...${NC}"
+    declare -a working_mirrors
+    while read -r speed mirror; do
+        [ "$speed" = "999999" ] && continue
+        working_mirrors+=("$mirror")
+    done < <(
+        for mirror in "${MIRRORS[@]}"; do
+            test_mirror_speed "$mirror"
+        done | sort -n
+    )
+    
+    if [ ${#working_mirrors[@]} -eq 0 ]; then
+        echo -e "${RED}No working mirrors found${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}Found ${#working_mirrors[@]} working mirrors${NC}"
+    
+    # Download and process catalog
+    local catalog_file="$STORAGE_DIR/catalog/pg_catalog.csv"
+    local processed_catalog="$STORAGE_DIR/catalog/processed_catalog.csv"
+    mkdir -p "$STORAGE_DIR/catalog"
+    
+    if ! download_catalog "$catalog_file"; then
+        echo -e "${RED}Failed to obtain catalog from any source${NC}"
+        exit 1
+    fi
+    
+    if ! parse_catalog "$catalog_file" "$processed_catalog"; then
+        echo -e "${RED}Failed to parse catalog${NC}"
+        exit 1
+    fi
+    
+    # Use processed catalog for downloads
+    local total=$(wc -l < "$processed_catalog")
+    echo -e "${GREEN}Ready to process $total books${NC}"
+    
+    # Initialize counters
+    local current=0
+    local epub_count=0
+    local txt_count=0
+    local failed=0
+    
+    # Process books with improved progress reporting
+    echo -e "\n${YELLOW}Processing $total books...${NC}"
+    process_books "$processed_catalog"
+    
+    # Show final statistics with colorful summary
+    echo -e "\n${GREEN}Download Complete!${NC}"
+    echo -e "${YELLOW}Final Statistics:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Total books processed: $total"
+    echo "EPUB files: $epub_count"
+    echo "TXT files: $txt_count"
+    echo "Failed downloads: $failed"
+    echo "Success rate: $(( (epub_count + txt_count) * 100 / total ))%"
+    echo "Total time: $(( $(date +%s) - start_time ))s"
+    echo "Average speed: $(echo "scale=2; $total / $(( $(date +%s) - start_time ))" | bc) books/s"
+    echo "Total storage used: $(du -h "$STORAGE_DIR" | tail -n1 | cut -f1)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Generate topic statistics
+    echo -e "\n${YELLOW}Books by Topic:${NC}"
+    for topic in "${!TOPICS[@]}"; do
+        count=$(find "$STORAGE_DIR/books/$topic" -type f 2>/dev/null | wc -l)
+        printf "%-15s: %5d books\n" "$topic" "$count"
+    done
 }
 
 # Run main process

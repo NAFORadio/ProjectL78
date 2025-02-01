@@ -22,7 +22,7 @@ debug() {
 # Error handling
 handle_error() {
     echo -e "${RED}Error: $1${NC}"
-    exit 1
+    echo -e "${YELLOW}Continuing with available packages...${NC}"
 }
 
 # Function to get sudo privileges
@@ -37,7 +37,20 @@ get_sudo() {
 install_requirements() {
     debug "Installing required packages..."
     sudo apt update
-    sudo apt install -y arc-theme lxappearance gtk3-engines-murrine || handle_error "Failed to install required packages"
+    
+    # Try to install packages one by one
+    packages=(
+        "arc-theme"
+        "lxappearance"
+        "gtk2-engines"
+        "gtk2-engines-pixbuf"
+        "adwaita-icon-theme"
+    )
+    
+    for package in "${packages[@]}"; do
+        debug "Installing $package..."
+        sudo apt install -y "$package" || handle_error "Failed to install $package"
+    done
 }
 
 # Function to apply settings for a user
@@ -117,16 +130,6 @@ palette_color_13=rgb(173,127,168)
 palette_color_14=rgb(52,226,226)
 palette_color_15=rgb(238,238,236)
 color_preset=Custom
-EOF
-
-    # Chromium settings
-    sudo -u $user cat > $home_dir/.config/chromium/Default/Preferences << EOF
-{
-   "browser": {
-      "custom_chrome_frame": true,
-      "enabled_labs_experiments": ["enable-force-dark"]
-   }
-}
 EOF
 
     # LXDE panel settings
@@ -209,7 +212,11 @@ main() {
     
     # Restart UI components
     debug "Restarting UI components..."
-    sudo systemctl restart lightdm || true
+    if command -v lightdm >/dev/null 2>&1; then
+        sudo systemctl restart lightdm || true
+    else
+        echo -e "${YELLOW}Please log out and log back in for all changes to take effect.${NC}"
+    fi
     
     echo -e "${GREEN}Dark mode enabled system-wide!${NC}"
     echo -e "${YELLOW}Please log out and log back in for all changes to take effect.${NC}"

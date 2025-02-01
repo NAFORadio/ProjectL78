@@ -6,12 +6,6 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Ensure script runs as root
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}This script must be run as root. Try using: sudo $0${NC}"
-   exit 1
-fi
-
 # Function to detect current user
 detect_user() {
     local user=""
@@ -25,6 +19,52 @@ detect_user() {
     done
     echo -e "${RED}Could not determine non-root user${NC}"
     exit 1
+}
+
+# Function to display drive selection interface
+select_drive() {
+    echo -e "\n${YELLOW}Scanning available drives...${NC}"
+    
+    # Get list of drives and their details
+    echo -e "\n${YELLOW}Available Drives:${NC}"
+    echo "----------------------------------------"
+    echo -e "ID\tSize\tType\tDevice"
+    echo "----------------------------------------"
+    
+    # Create arrays to store drive info
+    mapfile -t DRIVES < <(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v 'boot')
+    
+    if [ ${#DRIVES[@]} -eq 0 ]; then
+        echo -e "${RED}No drives found!${NC}"
+        exit 1
+    fi
+    
+    # Display drives with numbers
+    for i in "${!DRIVES[@]}"; do
+        echo -e "$((i+1)).\t${DRIVES[$i]}"
+    done
+    
+    # Get user selection
+    while true; do
+        echo -e "\n${YELLOW}Select drive by number (1-${#DRIVES[@]}) or 'q' to quit:${NC}"
+        read -r selection
+        
+        # Check for quit
+        if [[ $selection == "q" ]]; then
+            echo -e "${YELLOW}Exiting...${NC}"
+            exit 0
+        fi
+        
+        # Validate selection
+        if [[ $selection =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#DRIVES[@]}" ]; then
+            # Extract device path from selected drive
+            SELECTED_DRIVE=$(echo "${DRIVES[$((selection-1))]}" | awk '{print $1}')
+            echo "$SELECTED_DRIVE"
+            return 0
+        else
+            echo -e "${RED}Invalid selection. Please choose 1-${#DRIVES[@]} or 'q' to quit${NC}"
+        fi
+    done
 }
 
 # Function to detect filesystem type
@@ -62,83 +102,22 @@ create_fstab_entry() {
     esac
 }
 
-# Function to display drive selection interface
-select_drive() {
-    echo -e "\n${YELLOW}Available Drives:${NC}"
-    echo "----------------------------------------"
-    echo -e "ID\tSize\tLabel\tMount\tDevice"
-    echo "----------------------------------------"
-    
-    # Create arrays to store drive information
-    declare -a drives=()
-    declare -a sizes=()
-    declare -a labels=()
-    declare -a mounts=()
-    
-    # Counter for drive IDs
-    local count=1
-    
-    # Get drive information and store in arrays
-    while IFS= read -r line; do
-        # Skip header lines and empty lines
-        if [[ $line =~ "NAME" ]] || [[ -z $line ]] || [[ $line =~ "loop" ]] || [[ $line =~ "ram" ]]; then
-            continue
-        fi
-        
-        local device=$(echo "$line" | awk '{print $1}')
-        local size=$(echo "$line" | awk '{print $4}')
-        local label=$(echo "$line" | awk '{print $6}')
-        local mount=$(echo "$line" | awk '{print $7}')
-        
-        # Only include actual drives and partitions
-        if [[ $device =~ ^sd[a-z][0-9]?$ ]] || [[ $device =~ ^nvme[0-9]n[0-9]p[0-9]$ ]]; then
-            drives+=("/dev/$device")
-            sizes+=("$size")
-            labels+=("$label")
-            mounts+=("$mount")
-            
-            # Display drive information
-            printf "%d\t%s\t%s\t%s\t/dev/%s\n" \
-                   "$count" \
-                   "${size:-N/A}" \
-                   "${label:-N/A}" \
-                   "${mount:-N/A}" \
-                   "$device"
-            
-            ((count++))
-        fi
-    done < <(lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT,LABEL)
-    
-    # Prompt for selection
-    echo -e "\n${YELLOW}Select a drive by ID (1-$((count-1))) or 'q' to quit:${NC}"
-    while true; do
-        read -r selection
-        
-        # Check for quit
-        if [[ $selection == "q" ]]; then
-            echo -e "${YELLOW}Exiting...${NC}"
-            exit 0
-        fi
-        
-        # Validate selection
-        if [[ $selection =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -lt "$count" ]; then
-            # Return selected drive path
-            echo "${drives[$((selection-1))]}"
-            return 0
-        else
-            echo -e "${RED}Invalid selection. Please choose 1-$((count-1)) or 'q' to quit:${NC}"
-        fi
-    done
-}
-
 # Main script
 echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
+
+# Ensure running as root
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}This script must be run as root. Try using: sudo $0${NC}"
+   exit 1
+fi
+
 echo -e "${YELLOW}Detecting current user...${NC}"
 CURRENT_USER=$(detect_user)
 echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
 
 # Get drive selection
 DRIVE=$(select_drive)
+echo -e "${GREEN}Selected drive: $DRIVE${NC}"
 
 # Validate drive exists
 if [ ! -b "$DRIVE" ]; then

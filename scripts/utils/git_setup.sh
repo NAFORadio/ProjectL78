@@ -10,7 +10,7 @@ NC='\033[0m'
 clear
 
 # Display NAFO Radio banner
-cat << "EOF"
+cat << 'EOF'
 ===============================================================
  _   _    _    _____ ___    ____          _ _       
 | \ | |  / \  |  ___|_ _|  |  _ \ __ _ __| (_) ___  
@@ -81,13 +81,21 @@ install_git() {
 
 # Function to display Git instructions
 show_instructions() {
-    cat << "INSTRUCTIONS"
-
+    cat << 'EOF2'
 ===============================================================
                     GIT SETUP INSTRUCTIONS
 ===============================================================
 
-1. Initial Configuration
+1. View Current Configuration
+-----------------------
+# Show current user settings
+git config --global --get user.name
+git config --global --get user.email
+
+# Show all global settings
+git config --global -l
+
+2. Initial Configuration
 -----------------------
 # Set your username
 git config --global user.name "Your Name"
@@ -95,7 +103,11 @@ git config --global user.name "Your Name"
 # Set your email
 git config --global user.email "your.email@example.com"
 
-2. Create New Repository
+# Verify settings
+git config --global --get user.name
+git config --global --get user.email
+
+3. Create New Repository
 -----------------------
 # Navigate to your project directory
 cd /path/to/your/project
@@ -109,7 +121,7 @@ git add .
 # Initial commit
 git commit -m "Initial commit"
 
-3. Connect to Remote Repository
+4. Connect to Remote Repository
 -----------------------------
 # Add remote repository
 git remote add origin your-repository-url
@@ -117,7 +129,7 @@ git remote add origin your-repository-url
 # Push to remote
 git push -u origin main
 
-4. Common Commands
+5. Common Commands
 ----------------
 # Check status
 git status
@@ -141,7 +153,7 @@ git pull
 # View commit history
 git log
 
-5. Branch Management
+6. Branch Management
 ------------------
 # Create branch
 git branch branch-name
@@ -155,7 +167,7 @@ git checkout -b branch-name
 # Merge branch
 git merge branch-name
 
-6. Best Practices
+7. Best Practices
 ---------------
 - Commit often
 - Write clear commit messages
@@ -163,7 +175,7 @@ git merge branch-name
 - Create meaningful branches
 - Review changes before committing
 
-7. Troubleshooting
+8. Troubleshooting
 ----------------
 # Discard changes
 git checkout -- filename
@@ -182,8 +194,7 @@ ETH Wallet: 0x4AcD49Aca41E31aa54f43e3109e7b0dB47369B65
 
 For issues: naforadio@gmail.com
 ===============================================================
-
-INSTRUCTIONS"
+EOF2
 }
 
 # Main function

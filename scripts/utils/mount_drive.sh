@@ -9,16 +9,16 @@ YELLOW='\033[1;33m'   # For warning shots
 RED='\033[0;31m'      # For vatnik errors
 NC='\033[0m'          # Reset like Russian morale
 
-# Function to check privileges - More verification than Russian casualty numbers
+# Function to check privileges
 check_privileges() {
     if [[ $EUID -ne 0 ]]; then
-        echo -e "${YELLOW}Requesting administrative privileges (unlike Russian chain of command)...${NC}"
+        echo -e "${YELLOW}Requesting administrative privileges...${NC}"
         exec sudo "$0" "$@"
         exit $?
     fi
 }
 
-# Function to detect current user - Better detection than Russian recon
+# Function to detect current user
 detect_user() {
     if [ ! -z "$SUDO_USER" ]; then
         echo "$SUDO_USER"
@@ -27,69 +27,41 @@ detect_user() {
     fi
 }
 
-# Check for dialog - More reliable than Russian comms
+# Check for dialog
 install_dialog() {
     if ! command -v dialog >/dev/null 2>&1; then
-        echo -e "${YELLOW}Installing dialog package (faster than Russian logistics)...${NC}"
+        echo -e "${YELLOW}Installing dialog package...${NC}"
         apt-get update -qq
         apt-get install -y dialog
-        if ! command -v dialog >/dev/null 2>&1; then
-            echo -e "${RED}Failed to install dialog. Are the repos as broken as Russian supply lines?${NC}"
-            exit 1
-        fi
     fi
-    echo -e "${GREEN}Dialog package ready for action!${NC}"
 }
 
-# Function to create drive selection menu - Cleaner than Russian military strategy
+# Function to select drive
 select_drive() {
-    echo -e "${YELLOW}Scanning for available drives...${NC}"
+    echo -e "${YELLOW}Available drives:${NC}"
+    echo "----------------------------------------"
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v -E '/$|/boot|/boot/efi'
+    echo "----------------------------------------"
     
-    # Create temporary files for dialog
-    local temp_file=$(mktemp)
-    
-    # Get list of drives excluding system partitions
-    local drives=$(lsblk -pln -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v -E '/$|/boot|/boot/efi')
-    
-    if [ -z "$drives" ]; then
-        echo -e "${RED}No suitable drives found! Did the Russians steal our hardware?${NC}"
-        exit 1
-    fi
-    
-    # Create menu items
-    local menu_list=""
-    while IFS= read -r line; do
-        local dev=$(echo "$line" | awk '{print $1}')
-        local size=$(echo "$line" | awk '{print $2}')
-        local type=$(echo "$line" | awk '{print $3}')
-        menu_list="$menu_list $dev '$size $type'"
-    done <<< "$drives"
-    
-    # Display dialog menu
-    dialog --clear --title "NAFO Radio Drive Mount Utility" \
-           --menu "Select a drive to mount:" 15 60 0 \
-           $menu_list 2> "$temp_file"
-           
-    local status=$?
-    
-    if [ $status -ne 0 ]; then
-        echo -e "${YELLOW}Operation cancelled by user (unlike Russian retreats, this was planned)${NC}"
-        rm -f "$temp_file"
-        exit 1
-    fi
-    
-    local selected=$(cat "$temp_file")
-    rm -f "$temp_file"
-    
-    if [ ! -b "$selected" ]; then
-        echo -e "${RED}Invalid drive selected! As reliable as Russian equipment...${NC}"
-        exit 1
-    fi
-    
-    echo "$selected"
+    while true; do
+        echo -e "${YELLOW}Enter the device name (e.g., sda1) or 'q' to quit:${NC}"
+        read -r choice
+        
+        if [ "$choice" = "q" ]; then
+            echo -e "${YELLOW}Operation cancelled${NC}"
+            exit 0
+        fi
+        
+        if [ -b "/dev/$choice" ]; then
+            echo "/dev/$choice"
+            return 0
+        else
+            echo -e "${RED}Invalid device. Please try again.${NC}"
+        fi
+    done
 }
 
-# Main script - More functional than Russian military doctrine
+# Main script
 clear
 echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
 
@@ -100,30 +72,21 @@ check_privileges "$@"
 echo -e "${YELLOW}Detecting current user...${NC}"
 CURRENT_USER=$(detect_user)
 if [ -z "$CURRENT_USER" ]; then
-    echo -e "${RED}Could not detect user (like Russian soldiers without IFF)${NC}"
+    echo -e "${RED}Could not detect user${NC}"
     exit 1
 fi
 echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
 
-# Install dialog if needed
-echo -e "${YELLOW}Checking for dialog package...${NC}"
-install_dialog
-
 # Get drive selection
+echo -e "${YELLOW}Scanning for drives...${NC}"
 DRIVE=$(select_drive)
 
 if [ -z "$DRIVE" ]; then
-    echo -e "${RED}No drive selected (like Russian tanks without fuel)${NC}"
+    echo -e "${RED}No drive selected${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}Selected drive: $DRIVE${NC}"
-
-# Validate drive exists
-if [ ! -b "$DRIVE" ]; then
-    echo -e "${RED}Error: Drive $DRIVE not found!${NC}"
-    exit 1
-fi
 
 # Get PARTUUID
 PARTUUID=$(blkid -s PARTUUID -o value "$DRIVE")

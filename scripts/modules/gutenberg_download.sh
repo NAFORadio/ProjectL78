@@ -7,7 +7,19 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Configuration
-STORAGE_DIR="/mnt/data/Books"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS configuration
+    STORAGE_DIR="/Data/Storage/Books"
+    # Check for Homebrew
+    if ! command -v brew &> /dev/null; then
+        echo -e "${YELLOW}Installing Homebrew...${NC}"
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+else
+    # Linux configuration
+    STORAGE_DIR="/mnt/data/Books"
+fi
+
 LOG_FILE="$STORAGE_DIR/logs/gutenberg_download.log"
 CATALOG_FILE="$STORAGE_DIR/catalog.csv"
 
@@ -35,11 +47,19 @@ declare -A TOPICS=(
 )
 
 # EPUB viewer options (in order of preference)
-EPUB_VIEWERS=(
-    "calibre"
-    "foliate"
-    "fbreader"
-)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    EPUB_VIEWERS=(
+        "sigil"        # Open source EPUB editor/viewer
+        "coolreader"   # Open source e-book viewer
+        "calibre"      # Open source e-book management
+    )
+else
+    EPUB_VIEWERS=(
+        "calibre"
+        "foliate"
+        "fbreader"
+    )
+fi
 
 # Function to log messages
 log_message() {
@@ -50,35 +70,44 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
+# Function to create storage directory structure
+create_storage_dirs() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Create full path for macOS
+        sudo mkdir -p "/Data/Storage"
+        sudo chown $USER "/Data/Storage"
+        mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
+        chmod -R 755 "$STORAGE_DIR"
+    else
+        sudo mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
+        sudo chown -R $SUDO_USER:$SUDO_USER "$STORAGE_DIR"
+        sudo chmod -R 755 "$STORAGE_DIR"
+    fi
+}
+
 # Function to install EPUB viewer
 install_epub_viewer() {
     local viewer_installed=false
     
-    for viewer in "${EPUB_VIEWERS[@]}"; do
-        echo -e "${YELLOW}Attempting to install $viewer...${NC}"
-        if sudo apt-get install -y "$viewer"; then
-            viewer_installed=true
-            
-            # Create desktop entry for all users
-            sudo cat > "/usr/share/applications/$viewer.desktop" << EOF
-[Desktop Entry]
-Name=$viewer
-Comment=EPUB Reader
-Exec=$viewer %f
-Icon=$viewer
-Terminal=false
-Type=Application
-Categories=Office;Viewer;
-MimeType=application/epub+zip;
-EOF
-            
-            # Update desktop database
-            sudo update-desktop-database
-            
-            echo -e "${GREEN}Successfully installed $viewer${NC}"
-            break
-        fi
-    done
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        for viewer in "${EPUB_VIEWERS[@]}"; do
+            echo -e "${YELLOW}Attempting to install $viewer...${NC}"
+            if brew install "$viewer"; then
+                viewer_installed=true
+                echo -e "${GREEN}Successfully installed $viewer${NC}"
+                break
+            fi
+        done
+    else
+        for viewer in "${EPUB_VIEWERS[@]}"; do
+            echo -e "${YELLOW}Attempting to install $viewer...${NC}"
+            if sudo apt-get install -y "$viewer"; then
+                viewer_installed=true
+                echo -e "${GREEN}Successfully installed $viewer${NC}"
+                break
+            fi
+        done
+    fi
     
     if [ "$viewer_installed" = false ]; then
         echo -e "${RED}Failed to install any EPUB viewer${NC}"
@@ -94,12 +123,13 @@ sanitize_filename() {
 
 # Function to get sudo privileges
 get_sudo() {
-    if [[ $EUID -ne 0 ]]; then
-        echo -e "${YELLOW}This script requires administrative privileges.${NC}"
-        sudo -v
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to get administrative privileges.${NC}"
-            exit 1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS doesn't need sudo for user directory operations
+        return 0
+    else
+        if [[ $EUID -ne 0 ]]; then
+            echo -e "${YELLOW}This script requires administrative privileges.${NC}"
+            sudo -v || exit 1
         fi
     fi
 }
@@ -207,17 +237,14 @@ process_catalog() {
 
 # Main function
 main() {
-    # Get sudo privileges at the start
-    get_sudo
-    
     log_message "${YELLOW}Starting Gutenberg download process...${NC}"
+    
+    # Create necessary directories
+    create_storage_dirs
     
     # Install EPUB viewer
     log_message "${YELLOW}Installing EPUB viewer...${NC}"
     install_epub_viewer
-    
-    # Create necessary directories
-    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
     
     # Process catalog and download books
     process_catalog

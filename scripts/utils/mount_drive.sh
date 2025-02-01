@@ -1,126 +1,105 @@
 #!/bin/bash
 
-# NAFO Radio - Because Vatniks can't handle organized data storage
-# Fellas, let's mount some drives and make Russian IT cry
+# NAFO Radio - Mount drives like we mount offensives
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-# Color codes for output - As bright as Ukrainian victory
-GREEN='\033[0;32m'    # For successful hits
-YELLOW='\033[1;33m'   # For warning shots
-RED='\033[0;31m'      # For vatnik errors
-NC='\033[0m'          # Reset like Russian morale
+# Debug mode
+DEBUG=true
 
-# Function to check privileges
-check_privileges() {
-    if [[ $EUID -ne 0 ]]; then
-        echo -e "${YELLOW}Requesting administrative privileges...${NC}"
-        exec sudo "$0" "$@"
-        exit $?
+# Debug function
+debug() {
+    if [ "$DEBUG" = true ]; then
+        echo -e "${YELLOW}DEBUG: $1${NC}"
     fi
 }
 
-# Function to detect current user
-detect_user() {
-    if [ ! -z "$SUDO_USER" ]; then
-        echo "$SUDO_USER"
-    else
-        logname 2>/dev/null || whoami
-    fi
+# Error handling
+handle_error() {
+    echo -e "${RED}Error: $1${NC}"
+    exit 1
 }
 
-# Check for dialog
-install_dialog() {
-    if ! command -v dialog >/dev/null 2>&1; then
-        echo -e "${YELLOW}Installing dialog package...${NC}"
-        apt-get update -qq
-        apt-get install -y dialog
-    fi
-}
+# Check sudo
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${YELLOW}Requesting sudo access...${NC}"
+    exec sudo "$0" "$@"
+    exit $?
+fi
 
-# Function to select drive
-select_drive() {
-    echo -e "${YELLOW}Available drives:${NC}"
-    echo "----------------------------------------"
-    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep -E 'disk|part' | grep -v -E '/$|/boot|/boot/efi'
-    echo "----------------------------------------"
-    
-    while true; do
-        echo -e "${YELLOW}Enter the device name (e.g., sda1) or 'q' to quit:${NC}"
-        read -r choice
-        
-        if [ "$choice" = "q" ]; then
-            echo -e "${YELLOW}Operation cancelled${NC}"
-            exit 0
-        fi
-        
-        if [ -b "/dev/$choice" ]; then
-            echo "/dev/$choice"
-            return 0
-        else
-            echo -e "${RED}Invalid device. Please try again.${NC}"
-        fi
-    done
-}
-
-# Main script
-clear
-echo -e "${YELLOW}NAFO Radio Drive Mount Utility${NC}"
-
-# Check privileges
-check_privileges "$@"
-
-# Detect current user
-echo -e "${YELLOW}Detecting current user...${NC}"
-CURRENT_USER=$(detect_user)
+# Get real user
+CURRENT_USER=$SUDO_USER
 if [ -z "$CURRENT_USER" ]; then
-    echo -e "${RED}Could not detect user${NC}"
-    exit 1
-fi
-echo -e "${GREEN}Detected user: $CURRENT_USER${NC}"
-
-# Get drive selection
-echo -e "${YELLOW}Scanning for drives...${NC}"
-DRIVE=$(select_drive)
-
-if [ -z "$DRIVE" ]; then
-    echo -e "${RED}No drive selected${NC}"
-    exit 1
+    handle_error "Could not determine real user"
 fi
 
-echo -e "${GREEN}Selected drive: $DRIVE${NC}"
+debug "Current user: $CURRENT_USER"
 
-# Get PARTUUID
+# Simple drive listing
+echo -e "${YELLOW}Available drives:${NC}"
+echo "----------------------------------------"
+debug "Running lsblk..."
+
+# Get drives directly
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep -v -E 'loop|ram|boot|^NAME'
+if [ $? -ne 0 ]; then
+    handle_error "Failed to list drives"
+fi
+
+echo "----------------------------------------"
+
+# Drive selection
+while true; do
+    echo -e "${YELLOW}Enter device name (e.g., sda1) or 'q' to quit:${NC}"
+    read -r choice
+    
+    if [ "$choice" = "q" ]; then
+        echo -e "${YELLOW}Exiting...${NC}"
+        exit 0
+    fi
+    
+    if [ -b "/dev/$choice" ]; then
+        DRIVE="/dev/$choice"
+        break
+    else
+        echo -e "${RED}Invalid device. Try again.${NC}"
+    fi
+done
+
+debug "Selected drive: $DRIVE"
+
+# Get drive info
+debug "Getting PARTUUID..."
 PARTUUID=$(blkid -s PARTUUID -o value "$DRIVE")
 if [ -z "$PARTUUID" ]; then
-    echo -e "${RED}Error: Could not determine PARTUUID for $DRIVE${NC}"
-    exit 1
+    handle_error "Could not get PARTUUID"
 fi
-echo -e "${GREEN}Found PARTUUID: $PARTUUID${NC}"
 
-# Detect filesystem type
+debug "Getting filesystem type..."
 FS_TYPE=$(blkid -s TYPE -o value "$DRIVE")
 if [ -z "$FS_TYPE" ]; then
-    echo -e "${RED}Error: Could not determine filesystem type for $DRIVE${NC}"
-    exit 1
+    handle_error "Could not get filesystem type"
 fi
-echo -e "${GREEN}Detected filesystem: $FS_TYPE${NC}"
 
-# Define mount point
+echo -e "${GREEN}Drive: $DRIVE${NC}"
+echo -e "${GREEN}Type: $FS_TYPE${NC}"
+echo -e "${GREEN}PARTUUID: $PARTUUID${NC}"
+
+# Mount point
 MOUNT_POINT="/mnt/data"
+debug "Creating mount point..."
+mkdir -p "$MOUNT_POINT"
 
-# Create mount point if needed
-if [ ! -d "$MOUNT_POINT" ]; then
-    echo -e "${YELLOW}Creating mount point at $MOUNT_POINT...${NC}"
-    mkdir -p "$MOUNT_POINT"
-fi
-
-# Unmount if already mounted
+# Unmount if needed
 if mountpoint -q "$MOUNT_POINT"; then
-    echo -e "${YELLOW}Unmounting existing mount...${NC}"
+    debug "Unmounting existing mount..."
     umount "$MOUNT_POINT"
 fi
 
-# Mount drive
-echo -e "${YELLOW}Mounting $DRIVE to $MOUNT_POINT...${NC}"
+# Mount
+echo -e "${YELLOW}Mounting drive...${NC}"
 case $FS_TYPE in
     ntfs|fuseblk)
         mount -t ntfs-3g "$DRIVE" "$MOUNT_POINT" -o uid=$(id -u $CURRENT_USER),gid=$(id -g $CURRENT_USER),umask=0002
@@ -133,35 +112,33 @@ case $FS_TYPE in
         ;;
 esac
 
+if [ $? -ne 0 ]; then
+    handle_error "Mount failed"
+fi
+
 # Set permissions
-echo -e "${YELLOW}Setting permissions...${NC}"
+debug "Setting permissions..."
 chown -R "$CURRENT_USER:$CURRENT_USER" "$MOUNT_POINT"
 chmod -R 775 "$MOUNT_POINT"
 
 # Update fstab
-echo -e "${YELLOW}Updating /etc/fstab...${NC}"
+debug "Updating fstab..."
 FSTAB_ENTRY="PARTUUID=$PARTUUID $MOUNT_POINT $FS_TYPE defaults,uid=$(id -u $CURRENT_USER),gid=$(id -g $CURRENT_USER),umask=0002 0 0"
 
 # Backup fstab
 cp /etc/fstab /etc/fstab.backup
 
-# Remove any existing entries for this mount point
+# Update entry
 sed -i "\|$MOUNT_POINT|d" /etc/fstab
-
-# Add new entry
 echo "$FSTAB_ENTRY" >> /etc/fstab
 
-# Test fstab
-echo -e "${YELLOW}Testing new fstab configuration...${NC}"
+# Test mount
+echo -e "${YELLOW}Testing mount configuration...${NC}"
 if mount -a; then
-    echo -e "${GREEN}Drive mounted successfully!${NC}"
-    echo -e "${GREEN}Mount will persist across reboots.${NC}"
-    echo -e "${GREEN}Backup of original fstab saved at /etc/fstab.backup${NC}"
+    echo -e "${GREEN}Success! Drive mounted at $MOUNT_POINT${NC}"
+    echo -e "${GREEN}Mount will persist across reboots${NC}"
+    df -h "$MOUNT_POINT"
 else
-    echo -e "${RED}Error mounting drive. Restoring original fstab...${NC}"
     mv /etc/fstab.backup /etc/fstab
-    exit 1
-fi
-
-# Final verification
-df -h "$MOUNT_POINT" 
+    handle_error "Mount test failed"
+fi 

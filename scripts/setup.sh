@@ -39,72 +39,8 @@ check_hardware() {
         return 1
     fi
     
-    # Check for NVMe drives
-    nvme_drives=$(ls /dev/nvme* 2>/dev/null | wc -l)
-    if [ "$nvme_drives" -lt 2 ]; then
-        log_message "${RED}ERROR: Two NVMe drives required.${NC}"
-        return 1
-    fi
-    
     log_message "${GREEN}Hardware requirements met.${NC}"
     return 0
-}
-
-# Function to check for existing RAID
-check_existing_raid() {
-    if mdadm --detail /dev/md* &>/dev/null; then
-        echo -e "${YELLOW}WARNING: Existing RAID array(s) detected.${NC}"
-        read -p "Do you want to destroy existing RAID array(s) and create a new one? (y/N): " confirm
-        if [[ $confirm =~ ^[Yy]$ ]]; then
-            log_message "User confirmed RAID destruction."
-            # Stop all arrays
-            mdadm --stop /dev/md* &>/dev/null
-            # Zero superblocks
-            mdadm --zero-superblock /dev/nvme0n1 /dev/nvme1n1
-            return 0
-        else
-            log_message "User declined RAID destruction. Exiting."
-            exit 1
-        fi
-    fi
-    return 0
-}
-
-# Function to setup RAID
-setup_raid() {
-    log_message "Setting up RAID 1 array..."
-    
-    # Install mdadm if not present
-    apt-get update && apt-get install -y mdadm
-    
-    # Check for existing RAID
-    check_existing_raid
-    
-    # Create RAID 1 array
-    mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/nvme0n1 /dev/nvme1n1
-    
-    # Wait for array to sync
-    log_message "Waiting for RAID array to sync..."
-    while [ $(cat /proc/mdstat | grep -c "recovery") -gt 0 ]; do
-        sleep 10
-    done
-    
-    # Save RAID configuration
-    mdadm --detail --scan >> /etc/mdadm/mdadm.conf
-    update-initramfs -u
-    
-    # Format the RAID array
-    log_message "Formatting RAID array..."
-    mkfs.ext4 /dev/md0
-    
-    # Create mount point and mount the array
-    mkdir -p /storage
-    mount /dev/md0 /storage
-    
-    # Add to fstab for persistent mounting
-    echo "/dev/md0    /storage    ext4    defaults    0    2" >> /etc/fstab
-    
-    log_message "${GREEN}RAID setup complete and mounted at /storage${NC}"
 }
 
 # Function to install required software
@@ -162,9 +98,6 @@ main() {
         exit 1
     fi
     
-    # Setup RAID
-    setup_raid
-    
     # Ask user if they want to install software
     read -p "Do you want to install the required software packages now? (y/N): " install_confirm
     if [[ $install_confirm =~ ^[Yy]$ ]]; then
@@ -176,7 +109,7 @@ main() {
         
         log_message "${GREEN}NAFO Radio installation complete!${NC}"
     else
-        log_message "${YELLOW}Skipping software installation. RAID setup complete!${NC}"
+        log_message "${YELLOW}Skipping software installation. Setup complete!${NC}"
     fi
 }
 

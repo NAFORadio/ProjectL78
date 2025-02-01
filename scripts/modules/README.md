@@ -3,9 +3,6 @@
 ## About These Bad Boys
 Welcome to the NAFO Radio modules collection, where we keep our specialized tools that hit harder than Russian cope cages. Each module is designed to be as reliable as Ukrainian artillery and more effective than Russian logistics.
 
-## ⚠️ IMPORTANT WARNING ⚠️
-The Dark Mode script in utils/ is currently more dangerous than Russian nuclear threats. DO NOT RUN IT until further notice. Like Russian equipment, it needs maintenance.
-
 ## Available Modules
 
 ### 📚 Gutenberg Library Downloader
@@ -15,35 +12,7 @@ The Dark Mode script in utils/ is currently more dangerous than Russian nuclear 
 - Creates proper metadata (unlike Russian casualty reports)
 - Includes EPUB viewer installation (better UI than Russian targeting systems)
 
-### 🌑 Dark Mode Enabler
-- Darkens your UI like a Ukrainian night operation
-- Applies Arc-Dark theme (darker than Russian military future)
-- User-specific configuration (more precise than Russian missiles)
-- Safe system integration (unlike Russian equipment "integration")
-- No system breakage (unlike Russian military hardware)
-
-### 🛠️ RAID Configuration
-- Sets up RAID arrays (more redundant than Russian excuses)
-- Data protection (better than Russian OPSEC)
-- Performance optimization (faster than Russian retreats)
-
-### 🔒 Security Module
-- Hardens system like Ukrainian defense lines
-- Better password policies than Russian military security
-- Actually works (unlike Russian air defense)
-
-### 💻 Software Management
-- Package handling (more reliable than Russian supply lines)
-- Dependency resolution (clearer than Russian chain of command)
-- Clean installation (unlike Russian military recruitment)
-
-### 🌳 Primitive Technology Archive
-- Downloads survival knowledge (better than Russian field manuals)
-- Organizes content (unlike Russian battle plans)
-- Offline access (more reliable than Russian comms)
-
-## Usage
-Each module can be run independently (unlike Russian combined arms operations):
+Usage:
 
 ## Overview
 These scripts archive educational content from the Primitive Technology channel for offline preservation and study.

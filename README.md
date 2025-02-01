@@ -118,4 +118,30 @@ Special thanks to the NAFO community and all contributors who have helped make t
 
 <p align="center">
 Made with ❤️ by the NAFO Radio Team
-</p> 
+</p>
+
+## Overview
+NAFO Radio Project is a collection of scripts and tools for knowledge preservation and offline content management. This project focuses on maintaining critical information and content accessibility in austere environments.
+
+## Components
+
+### 1. Primitive Technology Downloader (Added 2024-02-01)
+A tool from the Knowledge Acquisition Department for archiving primitive technology educational content.
+- Downloads and organizes videos
+- Creates searchable indexes
+- Generates thumbnails
+- Cross-platform support (Linux, macOS, Windows)
+- Matrix-themed interface
+- Offline-first design
+
+### 2. File Management
+- `mac_shorten_names.sh`: Creates MS-DOS compatible filenames
+- `scrape_ups_manual.sh`: UPS manual archival tool
+
+### 3. System Management
+- `sensors.sh`: Environmental monitoring
+- `software.sh`: Package management
+- `raid.sh`: Storage redundancy
+- `security.sh`: System hardening
+
+## Installation 

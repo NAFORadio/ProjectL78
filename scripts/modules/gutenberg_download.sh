@@ -8,8 +8,8 @@ NC='\033[0m'
 
 # Configuration
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS configuration
-    STORAGE_DIR="$HOME/Library/NAFO/Books"
+    # macOS configuration - Using Desktop
+    STORAGE_DIR="$HOME/Desktop/Storage/Books"
     # Check for Homebrew
     if ! command -v brew &> /dev/null; then
         echo -e "${YELLOW}Installing Homebrew...${NC}"
@@ -17,13 +17,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 else
     # Linux configuration
-    STORAGE_DIR="/mnt/data/Books"
+    STORAGE_DIR="/home/storage/Books"
 fi
 
 LOG_FILE="$STORAGE_DIR/logs/gutenberg_download.log"
 CATALOG_FILE="$STORAGE_DIR/catalog.csv"
 
-# Gutenberg mirrors with direct book download URLs
+# Gutenberg mirrors (more reliable than Russian infrastructure)
 MIRRORS=(
     "https://www.gutenberg.org/cache/epub"
     "https://gutenberg.pglaf.org/cache/epub"
@@ -31,19 +31,23 @@ MIRRORS=(
     "http://gutenberg.readingroo.ms/cache/epub"
 )
 
-# Topics of interest with search terms
-declare -A TOPICS=(
-    ["mechanics"]="mechanics|machines|physics|mechanical engineering"
-    ["medicine"]="medicine|medical|anatomy|first aid|surgery|healing"
-    ["electronics"]="electronics|electrical|circuits|radio|telegraph"
-    ["programming"]="programming|computer|python|linux|unix|algorithm"
-    ["philosophy"]="philosophy|ethics|logic|reasoning|metaphysics"
-    ["civics"]="civics|government|democracy|constitution|law|rights"
-    ["art"]="art|drawing|painting|sculpture|design|architecture"
-    ["survival"]="survival|wilderness|farming|agriculture|hunting|foraging"
-    ["engineering"]="engineering|construction|building|materials|tools"
-    ["leadership"]="leadership|management|command|authority|influence|motivation|organization"
-    ["military"]="military|strategy|tactics|warfare|combat|defense|army|navy|war|battle|command"
+# Test books for verification (more accurate than Russian reports)
+TEST_BOOKS=(
+    "1342,Pride and Prejudice,Jane Austen,literature"
+    "84,Frankenstein,Mary Shelley,literature"
+    "2701,Moby Dick,Herman Melville,literature"
+    "98,A Tale of Two Cities,Charles Dickens,literature"
+)
+
+# Topics and their keywords (more organized than Russian battle plans)
+declare -A TOPICS
+TOPICS=(
+    ["literature"]="literature|poetry|drama|fiction|novel|story"
+    ["history"]="history|war|revolution|biography|memoir"
+    ["science"]="science|physics|chemistry|biology|mathematics|astronomy"
+    ["philosophy"]="philosophy|ethics|logic|metaphysics|political"
+    ["adventure"]="adventure|exploration|travel|journey|quest"
+    ["reference"]="reference|manual|guide|handbook|dictionary"
 )
 
 # EPUB viewer options (in order of preference)
@@ -61,26 +65,93 @@ else
     )
 fi
 
+# Function to ensure directory exists and is writable
+ensure_dir() {
+    local dir="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        mkdir -p "$dir"
+        if [ ! -w "$dir" ]; then
+            echo -e "${RED}Error: Directory $dir is not writable${NC}"
+            exit 1
+        fi
+    else
+        sudo mkdir -p "$dir"
+        sudo chown $USER:users "$dir"
+        sudo chmod 775 "$dir"
+    fi
+}
+
+# Function to create storage directory structure with proper permissions
+create_storage_dirs() {
+    echo -e "${YELLOW}Creating directory structure...${NC}"
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Create main directories on Desktop
+        ensure_dir "$STORAGE_DIR"
+        ensure_dir "$STORAGE_DIR/books"
+        ensure_dir "$STORAGE_DIR/logs"
+        ensure_dir "$STORAGE_DIR/catalog"
+        
+        # Create topic directories
+        for topic in "${!TOPICS[@]}"; do
+            ensure_dir "$STORAGE_DIR/books/$topic"
+        done
+        
+        # Set permissions
+        chmod -R 755 "$STORAGE_DIR"
+        
+        # Create a README file
+        cat > "$STORAGE_DIR/README.md" << EOF
+# Gutenberg Library Collection
+
+This directory contains downloaded books from Project Gutenberg.
+- books/: Contains downloaded books organized by topic
+- logs/: Contains download logs
+- catalog/: Contains the book catalog
+EOF
+        
+        # Verify directories
+        if [ ! -d "$STORAGE_DIR" ] || [ ! -w "$STORAGE_DIR" ]; then
+            echo -e "${RED}Failed to create or access $STORAGE_DIR${NC}"
+            exit 1
+        fi
+    else
+        # Linux setup
+        sudo mkdir -p /home/storage
+        sudo chown root:users /home/storage
+        sudo chmod 775 /home/storage
+        
+        ensure_dir "$STORAGE_DIR"
+        ensure_dir "$STORAGE_DIR/books"
+        ensure_dir "$STORAGE_DIR/logs"
+        ensure_dir "$STORAGE_DIR/catalog"
+        
+        # Create topic directories
+        for topic in "${!TOPICS[@]}"; do
+            ensure_dir "$STORAGE_DIR/books/$topic"
+        done
+        
+        # Set SGID bit
+        sudo chmod -R g+s "$STORAGE_DIR"
+    fi
+    
+    echo -e "${GREEN}Directory structure created successfully at:${NC}"
+    echo -e "${GREEN}$STORAGE_DIR${NC}"
+}
+
+# Set up logging after ensuring directory exists
+setup_logging() {
+    ensure_dir "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE" || {
+        echo -e "${RED}Cannot create log file${NC}"
+        exit 1
+    }
+}
+
 # Function to log messages
 log_message() {
     echo -e "$1"
-    if [ ! -f "$LOG_FILE" ]; then
-        mkdir -p "$(dirname "$LOG_FILE")"
-    fi
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-}
-
-# Function to create storage directory structure
-create_storage_dirs() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # Create user-accessible directory structure
-        mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
-        chmod -R 755 "$STORAGE_DIR"
-    else
-        sudo mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
-        sudo chown -R $SUDO_USER:$SUDO_USER "$STORAGE_DIR"
-        sudo chmod -R 755 "$STORAGE_DIR"
-    fi
 }
 
 # Function to install EPUB viewer
@@ -113,26 +184,7 @@ install_epub_viewer() {
     fi
 }
 
-# Function to sanitize filenames
-sanitize_filename() {
-    local filename="$1"
-    echo "$filename" | tr -cd '[:alnum:] ._-' | tr ' ' '_' | tr -s '_' | cut -c1-150
-}
-
-# Function to get sudo privileges
-get_sudo() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS doesn't need sudo for user directory operations
-        return 0
-    else
-        if [[ $EUID -ne 0 ]]; then
-            echo -e "${YELLOW}This script requires administrative privileges.${NC}"
-            sudo -v || exit 1
-        fi
-    fi
-}
-
-# Function to download a book in multiple formats
+# Function to download a book
 download_book() {
     local book_id="$1"
     local title="$2"
@@ -145,8 +197,8 @@ download_book() {
     mkdir -p "$output_dir"
     
     # Sanitize title and author for filename
-    local safe_title=$(sanitize_filename "$title")
-    local safe_author=$(sanitize_filename "$author")
+    local safe_title=$(echo "$title" | tr -cd '[:alnum:] ._-' | tr ' ' '_' | tr -s '_' | cut -c1-150)
+    local safe_author=$(echo "$author" | tr -cd '[:alnum:] ._-' | tr ' ' '_' | tr -s '_' | cut -c1-150)
     
     # Try to download both text and epub formats
     local formats=("txt" "epub")
@@ -157,9 +209,9 @@ download_book() {
             local url="${mirror}/${book_id}/pg${book_id}.${format}"
             log_message "${YELLOW}Attempting to download ${format} from: $url${NC}"
             
-            if wget -q --spider "$url"; then
+            if curl -s --head "$url" | head -n 1 | grep "HTTP/1.[01] [23].*" > /dev/null; then
                 local filename="${book_id}_${safe_author}_${safe_title}.${format}"
-                if wget -q -O "$output_dir/$filename" "$url"; then
+                if curl -s -o "$output_dir/$filename" "$url"; then
                     log_message "${GREEN}Successfully downloaded: $filename${NC}"
                     downloaded_files[$format]="$filename"
                     download_success=true
@@ -186,7 +238,6 @@ EOF
         
         for format in "${!downloaded_files[@]}"; do
             echo "${format}: ${downloaded_files[$format]}" >> "$meta_file"
-            # Add to catalog with format information
             echo "$book_id,$title,$author,$topic,${downloaded_files[$format]},$(date '+%Y-%m-%d')" >> "$CATALOG_FILE"
         done
         
@@ -203,17 +254,24 @@ process_catalog() {
     local catalog_file="$STORAGE_DIR/catalog/pg_catalog.csv"
     
     log_message "${YELLOW}Downloading Gutenberg catalog...${NC}"
-    mkdir -p "$STORAGE_DIR/catalog"
     
-    if ! wget -q -O "$catalog_file" "$catalog_url"; then
-        log_message "${RED}Failed to download catalog${NC}"
-        exit 1
+    # First try downloading the catalog
+    if ! curl -s -o "$catalog_file" "$catalog_url"; then
+        log_message "${RED}Failed to download main catalog, using test books...${NC}"
+        # Use test books if catalog download fails
+        for book in "${TEST_BOOKS[@]}"; do
+            IFS=',' read -r id title author topic <<< "$book"
+            log_message "${YELLOW}Processing test book: $title by $author${NC}"
+            download_book "$id" "$title" "$author" "$topic"
+        done
+        return
     fi
     
-    # Create catalog with headers
-    echo "ID,Title,Author,Topic,Filename,Date_Added" > "$CATALOG_FILE"
+    # Process the full catalog
+    log_message "${GREEN}Processing catalog...${NC}"
+    local processed=0
+    local max_books=50  # Limit for testing
     
-    # Process catalog with improved parsing
     tail -n +2 "$catalog_file" | while IFS=, read -r id title author subject language rights; do
         # Skip non-English books or those with copyright
         if [[ "$language" != "en" ]] || [[ "$rights" != "Public domain in the USA." ]]; then
@@ -227,34 +285,55 @@ process_catalog() {
             if echo "$subject $title" | grep -iE "${TOPICS[$topic]}" > /dev/null; then
                 log_message "${YELLOW}Processing: $title by $author${NC}"
                 download_book "$id" "$title" "$author" "$topic"
+                ((processed++))
                 break
             fi
         done
+        
+        # Limit the number of books for testing
+        if [ $processed -ge $max_books ]; then
+            log_message "${YELLOW}Reached maximum book limit for testing${NC}"
+            break
+        fi
     done
+    
+    log_message "${GREEN}Processed $processed books${NC}"
 }
 
 # Main function
 main() {
-    log_message "${YELLOW}Starting Gutenberg download process...${NC}"
+    echo -e "${YELLOW}Starting Gutenberg download process...${NC}"
     
-    # Create necessary directories
+    # Create directory structure first
     create_storage_dirs
     
+    # Setup logging
+    setup_logging
+    
+    # Initialize catalog file
+    ensure_dir "$(dirname "$CATALOG_FILE")"
+    echo "ID,Title,Author,Topic,Filename,Date_Added" > "$CATALOG_FILE"
+    
     # Install EPUB viewer
-    log_message "${YELLOW}Installing EPUB viewer...${NC}"
+    echo -e "${YELLOW}Installing EPUB viewer...${NC}"
     install_epub_viewer
     
     # Process catalog and download books
     process_catalog
     
-    log_message "${GREEN}Download process complete${NC}"
-    log_message "Books have been saved to: $STORAGE_DIR"
+    echo -e "${GREEN}Download process complete${NC}"
+    echo -e "${GREEN}Books have been saved to: $STORAGE_DIR${NC}"
     
     # Generate HTML index
     generate_html_index
     
     echo -e "${GREEN}EPUB viewer has been installed and configured.${NC}"
     echo -e "${YELLOW}You can now open EPUB files from the menu or by double-clicking them.${NC}"
+    
+    # Verify final structure
+    if [ ! -d "$STORAGE_DIR/books" ]; then
+        echo -e "${RED}Warning: Book directory not found at $STORAGE_DIR/books${NC}"
+    fi
 }
 
 # Function to generate HTML index

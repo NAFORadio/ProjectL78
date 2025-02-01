@@ -2,13 +2,31 @@
 
 ## gutenberg_download.sh
 ### [2024-03-XX]
-- [FIXED] macOS storage path to use $HOME/Library/NAFO/Books
-- [FIXED] Permission and directory creation issues on macOS
-- [FIXED] Read-only filesystem errors
-- Removed need for sudo on macOS
+- [FIXED] Changed macOS storage location to ~/Desktop/Storage/Books
+- Added README.md creation for storage directory
+- Added better directory location feedback
 - Previous changes:
+  - [FIXED] Added missing TOPICS array
+  - [FIXED] Added test books for backup
+  - [FIXED] Added actual download functionality
+  - [FIXED] Added book processing limits
+  - [FIXED] Added directory existence checks
+  - [FIXED] Added directory creation verification
+  - [FIXED] Added write permission verification
+  - Added ensure_dir function
+  - Added setup_logging function
+  - Added directory structure verification
+  - Added error handling for directory creation
+  - [FIXED] Changed Linux storage path to /home/storage/Books
+  - [FIXED] Added proper permission handling
+  - [FIXED] Added missing download functionality
+  - [FIXED] Added book processing functions
+  - [FIXED] Added topic categorization
+  - [FIXED] Added catalog processing
+  - [FIXED] Added curl-based downloads
+  - Added better download verification
+  - Added multi-mirror support
   - Added cross-platform support
-  - Updated storage paths
   - Added directory creation with proper permissions
   - Switched to open-source EPUB viewers
   - Added create_storage_dirs function

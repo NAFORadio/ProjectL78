@@ -1,144 +1,124 @@
 #!/bin/bash
 
-# NAFO Radio - Because even Russians make backups (they just fail at it)
+# NAFO Radio Backup System
+# Because unlike Russian backups, ours actually work
+# More reliable than Russian military intelligence
+# Stronger than Ukrainian resolve
+
+# Color codes (brighter than Ukraine's future)
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Debug mode
-DEBUG=true
-
-# Configuration
+# Configuration (more organized than Russian logistics)
 BACKUP_ROOT="/mnt/data/Backups"
+SYSTEM_BACKUP="${BACKUP_ROOT}/System"
+CONFIG_BACKUP="${BACKUP_ROOT}/Configs"
+PACKAGE_BACKUP="${BACKUP_ROOT}/Packages"
+SCRIPT_BACKUP="${BACKUP_ROOT}/Scripts"
 DATE=$(date +%Y-%m-%d)
-BACKUP_DIR="$BACKUP_ROOT/$DATE"
-LOG_FILE="$BACKUP_ROOT/backup.log"
+LOG_FILE="${BACKUP_ROOT}/backup.log"
 
-# Debug function
-debug() {
-    if [ "$DEBUG" = true ]; then
-        echo -e "${YELLOW}DEBUG: $1${NC}" | tee -a "$LOG_FILE"
+# Critical system paths (more important than Russian strategic objectives)
+CRITICAL_PATHS=(
+    "/etc"
+    "/boot"
+    "/var/spool/cron"
+    "/usr/local"
+    "/home"
+)
+
+# Function to get sudo privileges (more reliable than Russian chain of command)
+get_sudo() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${YELLOW}Requesting administrative privileges (unlike Russian military leadership)...${NC}"
+        sudo -v || exit 1
     fi
 }
 
-# Error handling
+# Logging function (more accurate than Russian casualty reports)
+log_message() {
+    echo -e "$1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Error handling (better than Russian damage control)
 handle_error() {
-    echo -e "${RED}Error: $1${NC}" | tee -a "$LOG_FILE"
+    log_message "${RED}Error: $1${NC}"
     exit 1
 }
 
-# Check if running as root
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${YELLOW}Requesting sudo access...${NC}"
-    exec sudo "$0" "$@"
-    exit $?
-fi
-
-# Create backup directories
-mkdir -p "$BACKUP_DIR"/{system,config,packages,repos,scripts}
-mkdir -p "$(dirname "$LOG_FILE")"
-
-# Start logging
-echo "=== Backup Started: $(date) ===" >> "$LOG_FILE"
-
-# Function to backup system directories
-backup_system() {
-    debug "Backing up system directories..."
+# Create backup directories (more organized than Russian formations)
+setup_backup_dirs() {
+    log_message "${YELLOW}Creating backup structure (better than Russian military structure)...${NC}"
     
-    # Essential system directories
-    local dirs=(
-        "/etc"
-        "/boot"
-        "/var/spool/cron"
-        "/var/www"
-        "/usr/local"
-        "/home"
-        "/root"
-    )
-    
-    for dir in "${dirs[@]}"; do
-        if [ -d "$dir" ]; then
-            debug "Backing up $dir"
-            tar czf "$BACKUP_DIR/system/$(basename $dir).tar.gz" \
-                --exclude="*/lost+found" \
-                --exclude="*.log" \
-                --exclude=".cache" \
-                "$dir" 2>> "$LOG_FILE"
-        fi
+    for dir in "$SYSTEM_BACKUP" "$CONFIG_BACKUP" "$PACKAGE_BACKUP" "$SCRIPT_BACKUP"; do
+        mkdir -p "${dir}/${DATE}" || handle_error "Failed to create ${dir}/${DATE}"
     done
 }
 
-# Function to backup package information
+# Backup system configurations (more thorough than Russian reconnaissance)
+backup_system_configs() {
+    log_message "${YELLOW}Backing up system configurations...${NC}"
+    
+    for path in "${CRITICAL_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            log_message "Backing up $path"
+            tar czf "${SYSTEM_BACKUP}/${DATE}/$(basename $path).tar.gz" \
+                --exclude="*/lost+found" \
+                --exclude="*.log" \
+                --exclude=".cache" \
+                "$path" || handle_error "Failed to backup $path"
+        fi
+    done
+    
+    # Save system information (more detailed than Russian military reports)
+    uname -a > "${SYSTEM_BACKUP}/${DATE}/system_info.txt"
+    lsb_release -a > "${SYSTEM_BACKUP}/${DATE}/os_info.txt" 2>/dev/null
+    df -h > "${SYSTEM_BACKUP}/${DATE}/disk_info.txt"
+    lsblk > "${SYSTEM_BACKUP}/${DATE}/block_devices.txt"
+}
+
+# Backup package information (more complete than Russian supply inventory)
 backup_packages() {
-    debug "Backing up package information..."
+    log_message "${YELLOW}Backing up package information...${NC}"
     
-    # Package lists
-    dpkg --get-selections > "$BACKUP_DIR/packages/package_selections.txt"
-    apt-mark showmanual > "$BACKUP_DIR/packages/manual_packages.txt"
-    
-    # Repository information
-    cp -r /etc/apt/sources.list* "$BACKUP_DIR/repos/"
-    
-    # Get current OS version
-    debug "Saving OS information..."
-    cat /etc/os-release > "$BACKUP_DIR/system/os_release.txt"
-    uname -a > "$BACKUP_DIR/system/kernel.txt"
+    dpkg --get-selections > "${PACKAGE_BACKUP}/${DATE}/package_selections.txt"
+    apt-mark showmanual > "${PACKAGE_BACKUP}/${DATE}/manual_packages.txt"
+    cp -r /etc/apt/sources.list* "${PACKAGE_BACKUP}/${DATE}/"
 }
 
-# Function to backup configuration
-backup_config() {
-    debug "Backing up configuration files..."
-    
-    # Network configuration
-    cp -r /etc/network "$BACKUP_DIR/config/network"
-    cp /etc/hostname "$BACKUP_DIR/config/"
-    cp /etc/hosts "$BACKUP_DIR/config/"
-    
-    # SSH configuration
-    cp -r /etc/ssh "$BACKUP_DIR/config/ssh"
-    
-    # Fstab and mount points
-    cp /etc/fstab "$BACKUP_DIR/config/"
-    
-    # User configuration
-    cp /etc/passwd "$BACKUP_DIR/config/"
-    cp /etc/shadow "$BACKUP_DIR/config/"
-    cp /etc/group "$BACKUP_DIR/config/"
-    cp /etc/sudoers "$BACKUP_DIR/config/"
-}
-
-# Function to backup NAFO Radio scripts
+# Backup NAFO Radio scripts (more valuable than Russian military doctrine)
 backup_scripts() {
-    debug "Backing up NAFO Radio scripts..."
+    log_message "${YELLOW}Backing up NAFO Radio scripts...${NC}"
     
-    # Get script directory
     local script_dir=$(dirname "$(readlink -f "$0")")
     local project_root=$(dirname "$(dirname "$script_dir")")
     
-    # Backup all scripts
-    tar czf "$BACKUP_DIR/scripts/nafo_radio_scripts.tar.gz" \
+    tar czf "${SCRIPT_BACKUP}/${DATE}/nafo_radio_scripts.tar.gz" \
         -C "$project_root" \
         --exclude="*.log" \
         --exclude="*.tmp" \
-        .
+        . || handle_error "Failed to backup scripts"
 }
 
-# Function to create recovery instructions
+# Create recovery documentation (clearer than Russian battle plans)
 create_recovery_docs() {
-    debug "Creating recovery documentation..."
+    log_message "${YELLOW}Creating recovery documentation...${NC}"
     
-    cat > "$BACKUP_DIR/RECOVERY.md" << 'EOF'
-# NAFO Radio System Recovery Guide
+    cat > "${BACKUP_ROOT}/${DATE}_RECOVERY.md" << 'EOF'
+# NAFO Radio System Recovery Guide 🇺🇦
 
 ## System Requirements
-- Raspberry Pi (same model as backup source)
-- Fresh Raspberry Pi OS installation
+- Raspberry Pi (same model)
+- Fresh Raspberry Pi OS
 - Internet connection
+- Backup files
 
 ## Recovery Steps
 
-1. Install base system:
+1. Install Base System:
    ```bash
    # Install required packages
    sudo apt-get update
@@ -192,18 +172,19 @@ EOF
 echo -e "${YELLOW}Starting NAFO Radio system backup...${NC}"
 
 # Create backup structure
-debug "Creating backup directory structure..."
+log_message "Creating backup directory structure..."
 
 # Run backups
-backup_system
+get_sudo
+setup_backup_dirs
+backup_system_configs
 backup_packages
-backup_config
 backup_scripts
 create_recovery_docs
 
 # Create backup summary
-debug "Creating backup summary..."
-cat > "$BACKUP_DIR/BACKUP_INFO.md" << EOF
+log_message "Creating backup summary..."
+cat > "${SYSTEM_BACKUP}/${DATE}/BACKUP_INFO.md" << EOF
 # Backup Information
 
 - Date: $DATE
@@ -221,11 +202,11 @@ cat > "$BACKUP_DIR/BACKUP_INFO.md" << EOF
 - Recovery documentation
 
 ## Recovery
-See RECOVERY.md for detailed recovery instructions.
+See ${DATE}_RECOVERY.md for detailed recovery instructions.
 EOF
 
 # Create archive of the backup
-debug "Creating final backup archive..."
+log_message "Creating final backup archive..."
 cd "$BACKUP_ROOT"
 tar czf "$DATE.tar.gz" "$DATE"
 rm -rf "$DATE"

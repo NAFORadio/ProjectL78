@@ -104,21 +104,6 @@ get_sudo() {
     fi
 }
 
-# Create storage directory structure
-setup_directories() {
-    log_message "${YELLOW}Creating directory structure...${NC}"
-    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
-    
-    # Set permissions
-    chown -R $SUDO_USER:$SUDO_USER "$STORAGE_DIR"
-    chmod -R 755 "$STORAGE_DIR"
-    
-    for topic in "${!TOPICS[@]}"; do
-        mkdir -p "$STORAGE_DIR/books/$topic"
-        chown $SUDO_USER:$SUDO_USER "$STORAGE_DIR/books/$topic"
-    done
-}
-
 # Function to download a book in multiple formats
 download_book() {
     local book_id="$1"
@@ -232,7 +217,7 @@ main() {
     install_epub_viewer
     
     # Create necessary directories
-    setup_directories
+    mkdir -p "$STORAGE_DIR"/{books,logs,catalog}
     
     # Process catalog and download books
     process_catalog

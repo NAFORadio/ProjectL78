@@ -408,7 +408,7 @@ create_video_index() {
     total_videos=$(find "$videos_dir" -name "*.mp4" | wc -l)
     echo -e "${YELLOW}Found $total_videos videos to index${NC}"
     
-    # Create index HTML file with dynamic values
+    # Create index HTML file with dynamic values and fixed paths
     cat > "$index_file" << EOF
 <!DOCTYPE html>
 <html>
@@ -488,6 +488,13 @@ create_video_index() {
             color: inherit;
         }
     </style>
+    <script>
+        // Add error handling for thumbnails
+        function handleImageError(img) {
+            img.onerror = null; // Prevent infinite loop
+            img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAYAAAB5fY51AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QQKDjsK7uq5KwAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAABKklEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA1v9QAATX68/0AAAAASUVORK5CYII=';
+        }
+    </script>
 </head>
 <body>
     <div class="header">
@@ -507,13 +514,21 @@ EOF
         local title=$(basename "$video" .mp4)
         local desc_file="${video%.*}.description"
         local thumb_file="${video%.*}.jpg"
-        local relative_video_path="Videos/$(basename "$video")"
-        local relative_thumb_path="Videos/$(basename "$thumb_file")"
+        
+        # Ensure thumbnail exists
+        if [ ! -f "$thumb_file" ]; then
+            echo -e "${YELLOW}Generating thumbnail for: $title${NC}"
+            ffmpeg -i "$video" -ss 00:00:02 -frames:v 1 -vf "scale=640:-1" "$thumb_file" -y 2>/dev/null
+        fi
+        
+        # Use relative paths from index.html location
+        local relative_video_path="./Videos/$(basename "$video")"
+        local relative_thumb_path="./Videos/$(basename "$thumb_file")"
         
         cat >> "$index_file" << EOF
         <div class="video-card">
             <a href="$relative_video_path" class="video-link">
-                <img class="thumbnail" src="$relative_thumb_path" alt="$title">
+                <img class="thumbnail" src="$relative_thumb_path" alt="$title" onerror="handleImageError(this)">
                 <div class="video-info">
                     <div class="video-title">$title</div>
 EOF
@@ -535,6 +550,23 @@ EOF
 EOF
     
     log_message "${GREEN}Video index created with $total_videos videos${NC}"
+    
+    # Verify thumbnails
+    echo -e "${YELLOW}Verifying thumbnails...${NC}"
+    local missing_thumbs=0
+    find "$videos_dir" -name "*.mp4" | while read video; do
+        local thumb_file="${video%.*}.jpg"
+        if [ ! -f "$thumb_file" ]; then
+            echo -e "${RED}Missing thumbnail for: $(basename "$video")${NC}"
+            missing_thumbs=$((missing_thumbs + 1))
+        fi
+    done
+    
+    if [ $missing_thumbs -gt 0 ]; then
+        echo -e "${RED}Warning: $missing_thumbs thumbnails are missing${NC}"
+    else
+        echo -e "${GREEN}All thumbnails verified${NC}"
+    fi
 }
 
 # Download videos function

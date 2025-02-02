@@ -3,98 +3,147 @@
 # Kiwix ZIM repository URL
 BASE_URL="https://download.kiwix.org/zim/"
 
-# Color codes
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Color codes - using more visible colors for dark terminals
+GREEN='\033[0;32m'     # Success messages
+YELLOW='\033[1;33m'    # Warnings and important info
+RED='\033[1;31m'       # Errors
+CYAN='\033[1;36m'      # Processing info
+WHITE='\033[1;37m'     # Regular output
+NC='\033[0m'           # No Color
 
-# Create temp directory for tracking processed files
-TEMP_DIR=$(mktemp -d)
-TOTAL_SIZE=0
+echo -e "${CYAN}=== NAFO Radio ZIM Size Calculator ===${NC}"
+echo -e "${YELLOW}Starting size calculation of English ZIM files...${NC}"
+echo -e "Base URL: $BASE_URL"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Function to convert human readable size to bytes
-to_bytes() {
+# Function to convert size to MB with logging
+to_mb() {
     local size=$1
-    local value=$(echo $size | sed 's/[A-Za-z]*//')
-    local unit=$(echo $size | sed 's/[0-9.]*//')
+    local value=$(echo "$size" | sed 's/[KMGT]$//')
+    local unit=$(echo "$size" | grep -o '[KMGT]$')
+    
+    echo -e "${WHITE}Converting size: $size${NC}" >&2
     
     case $unit in
-        K) echo "$value * 1024" | bc ;;
-        M) echo "$value * 1024 * 1024" | bc ;;
-        G) echo "$value * 1024 * 1024 * 1024" | bc ;;
-        *) echo $value ;;
+        K) 
+            echo -e "${WHITE}Converting KB to MB: $value KB${NC}" >&2
+            printf "%.0f" $(echo "scale=2; $value / 1024" | bc) ;;
+        M) 
+            echo -e "${WHITE}Size in MB: $value MB${NC}" >&2
+            printf "%.0f" "$value" ;;
+        G) 
+            echo -e "${WHITE}Converting GB to MB: $value GB${NC}" >&2
+            printf "%.0f" $(echo "scale=2; $value * 1024" | bc) ;;
+        T) 
+            echo -e "${WHITE}Converting TB to MB: $value TB${NC}" >&2
+            printf "%.0f" $(echo "scale=2; $value * 1024 * 1024" | bc) ;;
+        *) 
+            echo -e "${RED}Unknown unit: $unit for size: $size${NC}" >&2
+            echo "0" ;;
     esac
+}
+
+# Function to format size for display
+format_size() {
+    local mb=$1
+    
+    if [ -z "$mb" ] || [ "$mb" = "0" ]; then
+        echo "0 MB"
+        return
+    fi
+    
+    echo -e "${CYAN}Formatting size: $mb MB${NC}" >&2
+    
+    if [ "$mb" -ge 1048576 ]; then  # 1024 * 1024
+        printf "%.2f TB" $(echo "scale=2; $mb / 1024 / 1024" | bc)
+    elif [ "$mb" -ge 1024 ]; then
+        printf "%.2f GB" $(echo "scale=2; $mb / 1024" | bc)
+    else
+        printf "%.2f MB" $(echo "scale=2; $mb" | bc)
+    fi
 }
 
 # Function to process a directory
 process_directory() {
     local dir_url="$1"
-    local indent="$2"
+    local dir_name="$2"
+    local total_mb=0
     
-    echo -e "${YELLOW}${indent}Scanning $dir_url${NC}"
+    echo -e "\n${YELLOW}Processing directory: $dir_name${NC}"
+    echo -e "${CYAN}Fetching directory listing from: $dir_url${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Get directory listing
     local listing=$(curl -s "$dir_url")
     
-    # Process each line of the directory listing
-    echo "$listing" | grep -E 'href=".*\.zim".*[0-9]+[KMG]' | while read -r line; do
-        # Extract filename and size
-        local zim=$(echo "$line" | grep -Eo 'href="[^"]*_en_[^"]*\.zim"' | sed -E 's/href="//' | sed -E 's/"//')
-        [ -z "$zim" ] && continue
-        
-        local size=$(echo "$line" | grep -Eo '[0-9.]+[KMG]' | tail -n1)
-        
-        # Convert size to bytes
-        local size_bytes=$(to_bytes "$size")
-        
-        # Extract the base name
-        local BASE_NAME=$(echo "$zim" | awk -F'_' '{print $1"_"$2"_"$3}')
-        
-        # If this base name is not already processed
-        if [ ! -f "$TEMP_DIR/$BASE_NAME" ]; then
-            # Calculate size in GB
-            local size_gb=$(echo "scale=2; $size_bytes / 1024 / 1024 / 1024" | bc)
-            
-            # Format output with padding
-            printf "${GREEN}${indent}%-60s %8.2f GB${NC}\n" "$zim" "$size_gb"
-            
-            TOTAL_SIZE=$((TOTAL_SIZE + size_bytes))
-            echo "$zim:$size_bytes" > "$TEMP_DIR/$BASE_NAME"
-        fi
-    done
+    if [[ -z "$listing" ]]; then
+        echo -e "${RED}Error: Could not fetch directory listing${NC}"
+        echo "0"
+        return
+    fi
     
-    # Find and process subdirectories
-    echo "$listing" | grep -Eo 'href="[^"]+/"' | sed -E 's/href="([^"]+)"/\1/' | while read -r subdir; do
-        [[ "$subdir" == "../" || "$subdir" == "./" ]] && continue
-        process_directory "${dir_url}${subdir}" "$indent  "
-    done
+    # Process files based on directory
+    if [[ "$dir_name" == "wikipedia" ]]; then
+        echo -e "${YELLOW}Wikipedia directory detected - looking for English maxi files only${NC}"
+        while read -r line; do
+            filename=$(echo "$line" | grep -Eo 'wikipedia_[^"]*\.zim')
+            size=$(echo "$line" | grep -Eo '[0-9.]+[KMGT]' | tail -n1)
+            
+            if [ -n "$filename" ] && [ -n "$size" ]; then
+                echo -e "${CYAN}Found file: $filename${NC}"
+                mb=$(to_mb "$size")
+                total_mb=$((total_mb + mb))
+                formatted_size=$(format_size "$mb")
+                printf "${GREEN}%-70s %15s${NC}\n" "$filename" "$formatted_size"
+            fi
+        done < <(echo "$listing" | grep -E 'href=".*_en_.*_maxi.*\.zim"')
+    else
+        echo -e "${YELLOW}Processing all English files in $dir_name${NC}"
+        while read -r line; do
+            filename=$(echo "$line" | grep -Eo '[^">]*_en_[^"]*\.zim')
+            size=$(echo "$line" | grep -Eo '[0-9.]+[KMGT]' | tail -n1)
+            
+            if [ -n "$filename" ] && [ -n "$size" ]; then
+                echo -e "${CYAN}Found file: $filename${NC}"
+                mb=$(to_mb "$size")
+                total_mb=$((total_mb + mb))
+                formatted_size=$(format_size "$mb")
+                printf "${GREEN}%-70s %15s${NC}\n" "$filename" "$formatted_size"
+            fi
+        done < <(echo "$listing" | grep -E 'href=".*_en_.*\.zim"')
+    fi
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    formatted_total=$(format_size "$total_mb")
+    echo -e "${GREEN}$dir_name Directory Total: $formatted_total${NC}"
+    
+    echo "$total_mb"
 }
 
-echo -e "${YELLOW}Starting recursive scan of Kiwix ZIM repository...${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo -e "${YELLOW}Fetching directory list from Kiwix...${NC}"
 
-# Start recursive processing from root
-process_directory "$BASE_URL" ""
+# Get list of directories
+dirs=$(curl -s "$BASE_URL" | grep -Eo 'href="[^"]+/"' | sed -E 's/href="([^"]+)"/\1/' | grep -v '^/$\|^\.\./$')
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [[ -z "$dirs" ]]; then
+    echo -e "${RED}Error: Could not fetch directory list${NC}"
+    exit 1
+fi
 
-# Calculate and display total size in GB
-TOTAL_SIZE_GB=$(echo "scale=2; $TOTAL_SIZE / 1024 / 1024 / 1024" | bc)
-echo -e "\n${GREEN}Total Size of All English ZIM Files: $TOTAL_SIZE_GB GB${NC}"
+echo -e "${GREEN}Found $(echo "$dirs" | wc -l) directories to process${NC}"
 
-# Show summary by category
-echo -e "\n${YELLOW}Summary by Category:${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-for file in "$TEMP_DIR"/*; do
-    if [ -f "$file" ]; then
-        category=$(basename "$file" | cut -d'_' -f1)
-        size=$(cut -d':' -f2 < "$file")
-        size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
-        printf "${GREEN}%-20s %8.2f GB${NC}\n" "$category" "$size_gb"
-    fi
+# Process each directory and calculate grand total
+grand_total=0
+for dir in $dirs; do
+    dir_name=${dir%/}
+    echo -e "\n${YELLOW}Processing directory $dir_name...${NC}"
+    dir_total=$(process_directory "${BASE_URL}${dir}" "$dir_name")
+    grand_total=$(echo "$grand_total + $dir_total" | bc)
 done
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Cleanup
-rm -rf "$TEMP_DIR" 
+# Show grand total
+echo -e "\n${YELLOW}=== Final Calculations ===${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+formatted_grand_total=$(format_size "$grand_total")
+echo -e "${GREEN}Total Storage Required for All English ZIM Files: $formatted_grand_total${NC}"
+echo -e "${CYAN}Calculation complete!${NC}" 

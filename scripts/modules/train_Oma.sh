@@ -4,14 +4,22 @@
 DATA_DIR=~/survival_ai_data/
 mkdir -p $DATA_DIR
 
+# Create and activate a virtual environment
+VENV_DIR=~/survival_ai_env
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv "$VENV_DIR"
+fi
+source "$VENV_DIR/bin/activate"
+
 # Install required Python libraries
-pip3 install pdfminer.six langchain chromadb
+pip install --upgrade pip
+pip install pdfminer.six langchain chromadb
 
 # Recursively find and extract text from PDFs
 echo "Extracting survival knowledge from PDFs in all subdirectories..."
 find $DATA_DIR -type f -name "*.pdf" | while read pdf; do
     txt_file="${pdf%.pdf}.txt"
-    pdf2txt.py "$pdf" > "$txt_file"
+    python3 -m pdfminer.high_level "$pdf" > "$txt_file"
     echo "Processed: $pdf -> $txt_file"
 done
 
@@ -41,3 +49,5 @@ for file in text_files:
 print("Training complete! Knowledge base updated.")
 EOF
 
+# Deactivate virtual environment
+deactivate

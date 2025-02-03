@@ -1,72 +1,64 @@
 #!/bin/bash
+# AI Chat Project Setup Script using Ollama
 
-# Detect OS
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    OS="macos"
-elif [[ -f "/etc/raspi-config" ]]; then
-    OS="raspberrypi"
+# Set up error handling
+set -e
+set -o pipefail
+
+# Detect WSL
+if [[ -n "$WSL_DISTRO_NAME" ]]; then
+    echo "🐧 Running in WSL: $WSL_DISTRO_NAME"
 else
-    echo "Unsupported OS. This script only works on MacOS or Raspberry Pi OS."
+    echo "❌ This script requires WSL (Windows Subsystem for Linux)"
     exit 1
 fi
 
-echo "Detected OS: $OS"
+# Debug function
+debug() {
+    echo "🔍 $1"
+}
 
-# Update system and install dependencies
-if [[ "$OS" == "macos" ]]; then
-    echo "Updating MacOS system..."
-    brew update
-    echo "Installing dependencies..."
-    brew install python3 git wget cmake poppler
-else
-    echo "Updating Raspberry Pi system..."
-    sudo apt update && sudo apt upgrade -y
-    echo "Installing dependencies..."
-    sudo apt install -y python3-pip git wget cmake build-essential poppler-utils
-fi
+# Install Ollama
+install_ollama() {
+    debug "Installing Ollama..."
+    
+    # Install snapd if not present
+    if ! command -v snap &> /dev/null; then
+        sudo apt update
+        sudo apt install -y snapd
+    fi
+    
+    # Install Ollama
+    sudo snap install ollama
+    
+    # Verify installation
+    if ! command -v ollama &> /dev/null; then
+        echo "❌ Ollama installation failed"
+        exit 1
+    fi
+    
+    echo "✅ Ollama installed successfully"
+}
 
-# Install AI libraries
-echo "Installing AI libraries..."
-pip3 install torch torchvision torchaudio
-pip3 install llama-cpp-python whisper langchain chromadb pyaudio pdfminer.six
+# Pull the model
+setup_model() {
+    debug "Pulling TinyLlama model..."
+    ollama pull tinyllama
+}
 
-# Select a smaller AI model for Raspberry Pi
-echo "Select an AI model (default: TinyLlama 1B)"
-echo "1) TinyLlama (1.1B params) - Fastest option"
-echo "2) Phi-2 (1.3B params) - Better reasoning"
-read -p "Enter choice [1 or 2]: " model_choice
+# Main installation
+main() {
+    echo "🚀 Starting Ollama installation..."
+    
+    install_ollama
+    setup_model
+    
+    echo "✅ Installation complete!"
+    echo ""
+    echo "To use the model, run:"
+    echo "ollama run tinyllama"
+}
 
-if [[ "$model_choice" == "2" ]]; then
-    echo "Downloading Phi-2 (1.3B params)..."
-    wget -O ~/phi-2.Q4_K_M.gguf https://huggingface.co/TheBloke/Phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf
-    MODEL_FILE="phi-2.Q4_K_M.gguf"
-else
-    echo "Downloading TinyLlama (1.1B params)..."
-    wget -O ~/tinyllama-1b.Q4_K_M.gguf https://huggingface.co/TheBloke/TinyLlama-1B-GGUF/resolve/main/tinyllama-1b.Q4_K_M.gguf
-    MODEL_FILE="tinyllama-1b.Q4_K_M.gguf"
-fi
-
-# Set up survival knowledge database
-echo "Setting up survival knowledge database..."
-mkdir -p ~/survival_ai_data
-touch ~/survival_ai_data/survival_tips.txt
-echo "Store offline survival knowledge here!" >> ~/survival_ai_data/survival_tips.txt
-
-# Create AI control script
-echo "Creating survival AI script..."
-cat <<EOT > /usr/local/bin/survival_ai
-#!/bin/bash
-if [[ "\$1" == "--chat" ]]; then
-    ~/llama.cpp/main -m ~/$MODEL_FILE --ctx-size 1024
-elif [[ "\$1" == "--train" ]]; then
-    python3 ~/survival_ai/train.py
-elif [[ "\$1" == "--voice" ]]; then
-    python3 ~/survival_ai/voice_input.py
-else
-    echo "Usage: survival_ai --chat | --train | --voice"
-fi
-EOT
-chmod +x /usr/local/bin/survival_ai
-
-echo "Installation complete! Run 'survival_ai --chat' to start."
+# Run installation
+main
 

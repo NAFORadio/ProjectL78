@@ -1,0 +1,16 @@
+FROM tinyllama:latest
+
+# System prompt
+SYSTEM "You are a helpful assistant trained on specific PDF data. You aim to provide accurate and relevant information based on your training data."
+
+# Template for instruction format
+TEMPLATE "[INST] {{ .System }} {{ .Prompt }} [/INST]"
+
+# Training data
+PARAMETER stop "[INST]"
+PARAMETER stop "[/INST]"
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+
+# Training files
+FILE combined_training.jsonl /training_data

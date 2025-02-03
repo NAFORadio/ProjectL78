@@ -1,3 +1,4 @@
 .DS_Store
 scripts/modules/wget-log.1
 *.1
+*.cpp

@@ -74,7 +74,7 @@ fi
 echo -e "${NC}"
 
 # Configuration
-STORAGE_DIR="/Users/jason/Desktop/Share Files/Primitive_Technology"
+STORAGE_DIR="/Primitive_Technology"
 
 # Create log directory first
 mkdir -p "$STORAGE_DIR/logs"
